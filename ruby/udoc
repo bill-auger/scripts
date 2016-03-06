@@ -1,0 +1,82 @@
+#!/usr/bin/ruby
+
+
+SOURCE_DIR         = 'Source'
+DOC_DIR            = 'Doc'
+CORRELATION_MSG    = " header files have corresponding documented headers"
+MISSING_SOURCE_MSG = "the following documented headers are not represented in source directory:\n"
+MISSING_DOC_MSG    = "the following source headers are not represented in doc directory:\n"
+CTAGS_CMD_HEAD     = "ctags -x --c-kinds=-d+p "
+CTAGS_CMD_TAIL     = " | sort -n -k 3"
+CTAGS_REGEX        = /^(\S+)\s*(\S+)\s*(\d+)\s*(\S*)\s*(.*)/
+SYMBOL_KEY         = :symbol
+ROLE_KEY           = :role
+LINE_N_KEY         = :line_n
+FILENAME_KEY       = :filename
+PROTOTYPE_KEY      = :prototype
+DIR_KEY            = :headers_dir
+HEADERS_KEY        = :header_files
+ENTITIES_KEY       = :header_entities
+
+p "cannot find SOURCE_DIR '#{SOURCE_DIR}'" and exit unless Dir.exist? SOURCE_DIR
+p "cannot find DOC_DIR '#{DOC_DIR}'"       and exit unless Dir.exist? DOC_DIR
+
+@source = {}
+@doc    = {}
+@source[DIR_KEY     ] = SOURCE_DIR
+@source[HEADERS_KEY ] = source_headers  = []
+@source[ENTITIES_KEY] = source_entities = {}
+@doc   [DIR_KEY     ] = DOC_DIR
+@doc   [HEADERS_KEY ] = doc_headers     = []
+@doc   [ENTITIES_KEY] = doc_entities    = {}
+
+print "searching for *.h in SOURCE_DIR '#{SOURCE_DIR}'"
+Dir.chdir(SOURCE_DIR) { Dir["*.h"].each { | header | source_headers.push header } }
+print "searching for *.h in DOC_DIR '#{DOC_DIR}'"
+Dir.chdir(DOC_DIR   ) { Dir["*.h"].each { | header | doc_headers   .push header } }
+# p "source_headers=#{source_headers}" ; p "doc_headers=#{doc_headers}" ;
+
+# compare source headers to documented headers
+missing_source_headers = source_headers - doc_headers
+missing_doc_headers    = doc_headers    - source_headers
+correlated_headers     = source_headers & doc_headers
+uncorrelated_headers   = (source_headers + doc_headers) - correlated_headers
+print "#{correlated_headers.size} #{CORRELATION_MSG}"
+print MISSING_DOC_MSG unless missing_source_headers.empty?
+missing_source_headers.each { | header | print "\t#{header}\n" }
+print MISSING_SOURCE_MSG unless missing_doc_headers.empty?
+missing_doc_headers   .each { | header | print "\t#{header}\n" }
+
+
+# run CTAGS amd parse output for source headers and documented headers
+[ @source , @doc ].each do | ctags |
+  headers_dir = ctags[DIR_KEY    ]
+  headers     = ctags[HEADERS_KEY]
+  Dir.chdir headers_dir do
+    headers.each do | header |
+      ctags[ENTITIES_KEY][header] = entity_hashes = []
+      # list all default ctags entities (see `ctags --list-kinds=c`)
+      #     except macros (-d) plus methods (+p)
+      # e.g. MAX_DISPLAY_N    member      778 Constants.h      static const double MAX_DISPLAY_N = 4.0 ;
+      print "processing '#{header}' "
+      entities = `#{CTAGS_CMD_HEAD} "#{header}" #{CTAGS_CMD_TAIL}`.split "\n"
+      print "found (#{entities.size}) entities\n"
+
+# entities.each { |entity| print "entity=#{entity}\n" }
+
+      # parse CTAGS output
+      entities.each do | entity |
+        entity_hash                = {}
+        entity_hash[SYMBOL_KEY   ] ,
+        entity_hash[ROLE_KEY     ] ,
+        entity_hash[LINE_N_KEY   ] ,
+        entity_hash[FILENAME_KEY ] ,
+        entity_hash[PROTOTYPE_KEY] = (CTAGS_REGEX.match entity).captures
+
+        entity_hashes.push entity_hash
+
+# a_hash = entity_hashes[entity_hashes.size-1] ; print "\n\tfilename=#{a_hash[FILENAME_KEY]}\n" ; print "\tsymbol=#{a_hash[SYMBOL_KEY]}\n" ; print "\trole=#{a_hash[ROLE_KEY]}\n" ; print "\tline_n=#{a_hash[LINE_N_KEY]}\n" ; print "\tprototype=#{a_hash[PROTOTYPE_KEY]}\n"
+      end
+    end
+  end
+end

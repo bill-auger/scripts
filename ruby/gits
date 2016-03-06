@@ -1,0 +1,13 @@
+#!/usr/bin/ruby
+
+# this script displays all git repositories in and under the specified directory
+
+
+USAGE="usage:\ngits [ base-dir  ]"
+
+
+search_path = (ARGV[0] || `pwd`).gsub "\n" , ''
+git_dirs    = `find #{search_path} -type d -name .git`.split "\n"
+
+puts "#{git_dirs.size} found in #{search_path}"
+git_dirs.each { |ea| ; print "#{ea}\n" }

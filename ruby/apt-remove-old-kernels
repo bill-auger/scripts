@@ -1,0 +1,63 @@
+#!/usr/bin/ruby
+
+# this script will detect all installed kernels and headers on a debian-based system
+#     and give the option to remove all but the current set
+
+
+HEADERS_PREFIX = 'linux-headers-*'
+KERNEL_PREFIX  = 'linux-image-*'
+METAPACKAGES   = ['linux-headers-generic'    , 'linux-image-generic' ,
+                  'linux-headers-lowlatency' , 'linux-image-lowlatency']
+
+UNAME_CMD  = 'uname -r'
+DPKG_CMD_A = 'dpkg --get-selections'
+DPKG_CMD_B = '| grep -v deinstall'
+
+GREP_DEFAULT_CMD = "cat /boot/grub/grub.cfg | grep 'set default'"
+GREP_ENTRIES_CMD = "cat /boot/grub/grub.cfg | grep 'menuentry ' | grep -v 'gnulinux-simple-'" # exclude group entries
+
+
+# show current kernel
+
+release                = `#{UNAME_CMD}`
+current_kernel_version = release.split('-')[0..-2].join('-')
+
+print "\ncurrent running kernel =\n\t" + release + "\n"
+print "current kernel version =\n\t" + current_kernel_version + "\n\n"
+
+
+# show list of installed kernels
+
+installed_packages  = `#{DPKG_CMD_A} #{HEADERS_PREFIX} #{DPKG_CMD_B}`.split("\n")
+installed_packages += `#{DPKG_CMD_A} #{KERNEL_PREFIX} #{DPKG_CMD_B}`.split("\n")
+installed_packages.map! do | ea | ; ea = ea.split(' ')[0] ; end ;
+
+print "installed packages =\n\t" + installed_packages.join("\n\t") + "\n\n"
+
+
+# show list of obsolete kernels to be removed
+
+remove_packages = installed_packages.select do | ea |
+  (not ea.include? current_kernel_version) && (not METAPACKAGES.include? ea)
+end
+
+print "packages to remove =\n\t" + ((remove_packages.size.zero?)? "none" : remove_packages.join("\n\t")) + "\n\n"
+
+
+# run apt
+
+if remove_packages.empty?
+  print "no obsolete kernels installed" + "\n\n"
+else
+  print "remove these " + remove_packages.size.to_s + " packages ?" + "\n\n"
+
+  system 'sudo apt-get remove ' + remove_packages.join(" ")
+end
+
+
+# show current default grub entry
+
+default_entry = `#{GREP_DEFAULT_CMD}`.split("\"")[1].to_i
+entries       = `#{GREP_ENTRIES_CMD}`.split "\n"
+
+print "default grub entry =\n\t" + entries[default_entry].split(/['"]/)[1] + "\n\n"

@@ -1,0 +1,24 @@
+#!/usr/bin/ruby
+
+# fiflist - Find In Files List Lines
+# this script iterates over each file returned by `fif`
+#     and displays each matching line
+
+
+search_path     = ARGV[0]
+search_term     = ARGV[1]
+exclude_term    = ARGV[2]
+coincident_term = ARGV[3]
+USAGE           = "usage:\n\tfiflist <path/to/search> <search-term> [ <exclude-term> ] [ <coincident-term> ]\n" +
+                  "find search-term in files displaying each matching line"
+
+unless search_term ; print USAGE ; exit ; end ;
+
+fif_cmd  = "fif #{search_path} #{search_term} #{exclude_term}"
+fif_list = `#{fif_cmd}`.split "\n"
+
+fif_list.each do |ea|
+  print "\n#{ea}\n"
+  system "cat #{ea} | grep -n #{search_term}"
+  system "cat #{ea} | grep -n #{coincident_term}" if coincident_term
+end
