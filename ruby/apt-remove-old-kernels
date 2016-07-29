@@ -6,8 +6,6 @@
 
 HEADERS_PREFIX = 'linux-headers-*'
 KERNEL_PREFIX  = 'linux-image-*'
-METAPACKAGES   = ['linux-headers-generic'    , 'linux-image-generic' ,
-                  'linux-headers-lowlatency' , 'linux-image-lowlatency']
 
 UNAME_CMD  = 'uname -r'
 DPKG_CMD_A = 'dpkg --get-selections'
@@ -29,7 +27,7 @@ print "current kernel version =\n\t" + current_kernel_version + "\n\n"
 # show list of installed kernels
 
 installed_packages  = `#{DPKG_CMD_A} #{HEADERS_PREFIX} #{DPKG_CMD_B}`.split("\n")
-installed_packages += `#{DPKG_CMD_A} #{KERNEL_PREFIX} #{DPKG_CMD_B}`.split("\n")
+installed_packages += `#{DPKG_CMD_A} #{KERNEL_PREFIX}  #{DPKG_CMD_B}`.split("\n")
 installed_packages.map! do | ea | ; ea = ea.split(' ')[0] ; end ;
 
 print "installed packages =\n\t" + installed_packages.join("\n\t") + "\n\n"
@@ -38,7 +36,7 @@ print "installed packages =\n\t" + installed_packages.join("\n\t") + "\n\n"
 # show list of obsolete kernels to be removed
 
 remove_packages = installed_packages.select do | ea |
-  (not ea.include? current_kernel_version) && (not METAPACKAGES.include? ea)
+  (not ea.include? current_kernel_version) && (ea.split '-')[2].to_i > 0
 end
 
 print "packages to remove =\n\t" + ((remove_packages.size.zero?)? "none" : remove_packages.join("\n\t")) + "\n\n"

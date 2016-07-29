@@ -1,0 +1,38 @@
+#!/usr/bin/env ruby
+
+SHOULD_SHOW_ALL    = (ARGV.include? '-a') || (ARGV.include? '--all'        )
+SHOULD_FILTER_NONE = (ARGV.include? '-d') || (ARGV.include? '--deinstalled')
+N_RESULTS          = 12
+QUERY_CMD          = "dpkg-query -W --showformat='${Installed-Size} ${Package} ${Status}\n'"
+SORT_ASC_CMD       = 'sort -n'
+SORT_DES_CMD       = 'sort -nr'
+SORT_CMD           = SHOULD_SHOW_ALL ? SORT_ASC_CMD : SORT_DES_CMD
+
+
+# parse indexed packages
+indexed_packages = (`#{QUERY_CMD} | #{SORT_CMD}`.split "\n").map do | ea |
+  tokens = ea.split ' ' ;
+  { :size => tokens.shift , :name => tokens.shift , :status => tokens.pop }
+end
+
+# filter installed packages
+longest_installed_name = 0
+n_packages             = 0
+installed_packages     = indexed_packages.select do | ea |
+  if SHOULD_SHOW_ALL || (n_packages += 1) <= N_RESULTS
+    name_length = ea[:name].size
+
+    longest_installed_name = name_length if name_length > longest_installed_name
+
+    ea[:status] == 'installed' || SHOULD_FILTER_NONE
+  else false
+  end
+end
+
+
+# display installed packages
+print "#{sprintf "| %-9s | %-#{longest_installed_name}s |" , "Size (kB)" , "Package Name"}\n"
+print "|-----------+-" ; longest_installed_name.times { print '-' } ; print "-|\n"
+installed_packages.each do | ea |
+  print "#{sprintf "| %-9d | %-#{longest_installed_name}s |" , ea[:size] , ea[:name]}\n"
+end

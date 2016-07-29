@@ -1,0 +1,25 @@
+#!/bin/bash
+
+IVL=3
+KB_SCALE=$(($IVL*125)) # bytes => kbits
+UP_STATS_FILE=/sys/class/net/eth0/statistics/tx_bytes
+DOWN_STATS_FILE=/sys/class/net/eth0/statistics/rx_bytes
+if [ "$1" == "--up" ]
+then DIR="up"   ; STATS_FILE=$UP_STATS_FILE
+else DIR="down" ; STATS_FILE=$DOWN_STATS_FILE
+fi
+
+
+total_bytes=`cat $STATS_FILE`
+prev_bytes=$total_bytes
+
+while ((1))
+do sleep $IVL ;
+   total_bytes=`cat $STATS_FILE`
+   bytes=$(($total_bytes-$prev_bytes))
+   kbps=$(($bytes/$KB_SCALE))
+   prev_bytes=$total_bytes
+
+   [ $(($kbps)) -gt $((99)) ] && spd-say "$(($kbps/100*100))" || spd-say "$kbps"
+   clear ; echo "$((bytes/$IVL)) bytes/sec $DIR" ;
+done

@@ -1,0 +1,30 @@
+#!/bin/bash
+
+USAGE="Usage: duse [ dir ]
+\tdisplay the disk space usage of the specified directory and each immediate subdirectory"
+
+
+if   [ "$1" == "" ] ; then dir=`pwd` ;
+elif [ ! -d "$1" ]  ; then printf "$USAGE\n" ; exit ;
+else                  dir=$1 ; fi ;
+
+# get absolute path
+path=`realpath $dir 2> /dev/null`
+if [ "$path" == "" ] ; then path=$dir ; fi
+
+# get directory usage
+duse=`du "$dir" --max-depth=1 --block-size=1M | sort -n`
+
+# get partition free space
+# coreutils ~= v8.21
+#free_mb="$(df --output=avail --type=ext4 --block-size=1M | grep -v Avail)"
+free_mb=`df --type=ext4 --block-size=1M | grep -v Avail | tr " " "\n" | grep -vG "^$" | head -n 4 | tail -n 1`
+
+# display results
+COL_W=8
+pad_w=$(($COL_W - ${#free_mb}))
+printf "directory sizes under '$path'\n"
+printf "MB      dir\n"
+printf "%s\n" "-----------"
+printf "$duse\n"
+printf "${free_mb}%${pad_w}s%sfree\n"

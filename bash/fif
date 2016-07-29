@@ -1,0 +1,30 @@
+#!/bin/bash
+
+# fif - Find In Files
+#     this script lists the filenames of all files under <dir> that contain <term>
+
+
+dir=$1
+term=$2
+filters=$3
+
+
+FILTERS="*.~|*.kate-swp|*.o^|.git/"
+if [ $filters ] ; then FILTERS="$FILTERS|$filters" ; fi ;
+USAGE="fif - find in files"
+USAGE="$USAGE\n\nusage: fif <dir> <term> [\"filter1[|filter2][...]\"]"
+USAGE="$USAGE\ne.g."
+USAGE="$USAGE\n\tfif /home/me searchterm"
+USAGE="$USAGE\n\tfif . \"unsigned int aVar\" .bak"
+USAGE="$USAGE\n\tfif ./src \"aFunction(\" \".bak|.db\""
+USAGE="$USAGE\n\ndescription: search <dir> recursively for all files containing <term>"
+USAGE="$USAGE\nreturns: filenames containing <term>"
+USAGE="$USAGE\ncaveats: <term> must be a single word"
+USAGE="$USAGE\ndefault filters: `echo $FILTERS | tr "^" " " | tr \"|\" \" \"`\n"
+
+
+case $term in
+  "" ) printf "$USAGE" ;;
+  *  ) find $dir | xargs grep "$term" -sl | grep -v -E "$FILTERS" ;;
+esac
+

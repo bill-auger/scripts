@@ -1,0 +1,16 @@
+*
+!ruby/
+ruby/*
+!ruby/apt-remove-old-kernels
+!ruby/fiflist
+!ruby/gits
+!ruby/udoc
+
+!bash/
+bash/*
+!bash/duse
+!bash/fif
+!bash/guake-quick-open.sh
+!bash/pkuse
+!bash/speed
+!bash/toggle-mic.sh
