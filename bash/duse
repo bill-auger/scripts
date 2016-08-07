@@ -1,30 +1,40 @@
 #!/bin/bash
 
-USAGE="Usage: duse [ dir ]
+USAGE="Usage: duse [ base_dir ]
 \tdisplay the disk space usage of the specified directory and each immediate subdirectory"
+COL_W=10
 
 
-if   [ "$1" == "" ] ; then dir=`pwd` ;
+if   [ "$1" == "" ] ; then base_dir=`pwd` ;
 elif [ ! -d "$1" ]  ; then printf "$USAGE\n" ; exit ;
-else                  dir=$1 ; fi ;
+else                  base_dir=$1 ; fi ;
 
 # get absolute path
-path=`realpath $dir 2> /dev/null`
-if [ "$path" == "" ] ; then path=$dir ; fi
+path=`realpath $base_dir 2> /dev/null`
+if [ "$path" == "" ] ; then path=$base_dir ; fi
 
-# get directory usage
-duse=`du "$dir" --max-depth=1 --block-size=1M | sort -n`
-
-# get partition free space
-# coreutils ~= v8.21
-#free_mb="$(df --output=avail --type=ext4 --block-size=1M | grep -v Avail)"
-free_mb=`df --type=ext4 --block-size=1M | grep -v Avail | tr " " "\n" | grep -vG "^$" | head -n 4 | tail -n 1`
-
-# display results
-COL_W=8
-pad_w=$(($COL_W - ${#free_mb}))
+# display directory usage
 printf "directory sizes under '$path'\n"
-printf "MB      dir\n"
-printf "%s\n" "-----------"
-printf "$duse\n"
-printf "${free_mb}%${pad_w}s%sfree\n"
+printf "MB used   | dir\n"
+printf "%s\n" "----------|----"
+while read line
+do
+  free_mb=`echo $line | awk '{ print $1 }'`
+  directory=`echo $line | awk '{ print $2 }'`
+  pad_w=$(($COL_W - ${#free_mb}))
+  printf "%s%${pad_w}s| used in %s\n" $free_mb "" $directory
+done < <(du "$base_dir" --max-depth=1 --block-size=1M | sort -n)
+
+# display per partition free space
+printf "\nfree space per partition\n"
+printf "MB free   | partition\n"
+printf "%s\n" "----------|----------"
+while read line
+do
+  device=`echo $line | awk '{ print $1 }'`
+  free_mb=`echo $line | awk '{ print $4 }'`
+  percent=`echo $line | awk '{ print $5 }'`
+  mountpoint=`echo $line | awk '{ print $6 }'`
+  pad_w=$(($COL_W - ${#free_mb}))
+  printf "%s%${pad_w}s| %s free on %s => %s\n" $free_mb "" $percent $device $mountpoint
+done < <(df --type=ext4 --block-size=1M | grep -v Avail)
