@@ -1,13 +1,24 @@
-#!/usr/bin/ruby
+#!/usr/bin/env ruby
 
-# this script displays all git repositories in and under the specified directory
+USAGE  = "USAGE:\n\n\tgits [ <base-dir> ]\n\n"                                                +
+         "DESCRIPTION:\n"                                                                     +
+         "\tthis script displays all git repositories in and under the specified directory\n" +
+         "\talong with disk usage for the repo both with and without the working tree"
+DU_CMD = 'du --summarize --human-readable'
 
 
-USAGE="usage:\ngits [ base-dir  ]"
+!(puts USAGE) and exit unless ARGV[0].nil? || (File.directory? ARGV[0])
 
 
 search_path = (ARGV[0] || `pwd`).gsub "\n" , ''
 git_dirs    = `find #{search_path} -type d -name .git`.split "\n"
+n_repos     = git_dirs.size
 
-puts "#{git_dirs.size} found in #{search_path}"
-git_dirs.each { |ea| ; print "#{ea}\n" }
+puts "#{n_repos} git repo#{(n_repos != 1) ? "s" : ""} found under #{search_path}"
+git_dirs.each do | git_dir |
+  working_dir = git_dir.gsub /(\/.git$)/ , ''
+  total_bytes = (`#{DU_CMD} #{working_dir}`.split "\t")[0]
+  raw_bytes   = (`#{DU_CMD} #{git_dir    }`.split "\t")[0]
+
+  puts "#{working_dir} #{total_bytes}B (#{raw_bytes}B raw)"
+end

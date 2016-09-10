@@ -1,4 +1,4 @@
-#!/usr/bin/ruby
+#!/usr/bin/env ruby
 
 # fiflist - Find In Files List Lines
 # this script iterates over each file returned by `fif`

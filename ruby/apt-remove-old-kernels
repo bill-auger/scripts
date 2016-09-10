@@ -1,4 +1,4 @@
-#!/usr/bin/ruby
+#!/usr/bin/env ruby
 
 # this script will detect all installed kernels and headers on a debian-based system
 #     and give the option to remove all but the current set
