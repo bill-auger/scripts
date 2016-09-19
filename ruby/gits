@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
-USAGE  = "USAGE:\n\n\tgits [ <base-dir> ]\n\n"                                                +
+USAGE  = "USAGE:\n"                                                                           +
+         "\tgits [ <base-dir> ]\n\n"                                                          +
          "DESCRIPTION:\n"                                                                     +
          "\tthis script displays all git repositories in and under the specified directory\n" +
          "\talong with disk usage for the repo both with and without the working tree"

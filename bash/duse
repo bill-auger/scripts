@@ -2,7 +2,7 @@
 
 USAGE="Usage: duse [ base_dir ]
 \tdisplay the disk space usage of the specified directory and each immediate subdirectory"
-COL_W=10
+COL_W=8
 
 
 if   [ "$1" == "" ] ; then base_dir=`pwd` ;
@@ -15,8 +15,8 @@ if [ "$path" == "" ] ; then path=$base_dir ; fi
 
 # display directory usage
 printf "directory sizes under '$path'\n"
-printf "MB used   | dir\n"
-printf "%s\n" "----------|----"
+printf "MB used | dir\n"
+printf "%s\n" "--------|----"
 while read line
 do
   free_mb=`echo $line | awk '{ print $1 }'`
@@ -27,8 +27,8 @@ done < <(du "$base_dir" --max-depth=1 --block-size=1M | sort -n)
 
 # display per partition free space
 printf "\nfree space per partition\n"
-printf "MB free   | partition\n"
-printf "%s\n" "----------|----------"
+printf "MB free | partition\n"
+printf "%s\n" "--------|----------"
 while read line
 do
   device=`echo $line | awk '{ print $1 }'`
