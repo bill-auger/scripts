@@ -1,10 +1,4 @@
 *
-!ruby/
-ruby/*
-!ruby/apt-remove-old-kernels
-!ruby/fiflist
-!ruby/gits
-!ruby/udoc
 
 !bash/
 bash/*
@@ -14,3 +8,18 @@ bash/*
 !bash/pkuse
 !bash/speed
 !bash/toggle-mic.sh
+!bash/vm
+
+
+!ruby/
+ruby/*
+!ruby/apt-remove-old-kernels
+!ruby/fiflist
+!ruby/gits
+!ruby/udoc
+
+
+!gm/
+gm/*
+!gm/lctv-chat/
+!gm/lctv-chat/*

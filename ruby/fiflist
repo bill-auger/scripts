@@ -12,7 +12,7 @@ COINCIDENT_TERM = ARGV[3]
 USAGE           = "USAGE:\n"                                                                            +
                   "\tfiflist <path/to/search> <search-term> [ <exclude-term> ] [ <coincident-term> ]\n" +
                   "DESCRIPTION:\n"                                                                      +
-                  "\tfind search-term in files displaying each matching line"
+                  "\tfind search-term in files displaying each matching line\n"
 
 
 unless SEARCH_TERM ; print USAGE ; exit ; end ;

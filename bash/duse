@@ -1,12 +1,12 @@
 #!/bin/bash
 
 USAGE="Usage: duse [ base_dir ]
-\tdisplay the disk space usage of the specified directory and each immediate subdirectory"
+\tdisplay the disk space usage of the specified directory and each immediate subdirectory\n"
 COL_W=8
 
 
 if   [ "$1" == "" ] ; then base_dir=`pwd` ;
-elif [ ! -d "$1" ]  ; then printf "$USAGE\n" ; exit ;
+elif [ ! -d "$1" ]  ; then printf "$USAGE" ; exit ;
 else                  base_dir=$1 ; fi ;
 
 # get absolute path

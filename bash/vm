@@ -1,0 +1,86 @@
+#!/bin/bash
+
+
+read -r -d '' USAGE <<-'USAGE_END'
+USAGE:
+        vm
+        vm <img>
+        vm <img-dir>
+
+    where: <img> is the path to an .img file
+    where: <img-dir> is one of `ls -d $VM_DIR/*/`
+
+    NOTE: VM_DIR and VM_SSH_PORT must be defined in the environment
+USAGE_END
+[ -z "$VM_DIR" -o -z "$VM_SSH_PORT" ] && echo "$USAGE" && exit
+
+
+function isValidSelection
+{
+  [ $choice -ge "0" -a $choice -le $N_IMG_DIRS ] && echo 1 || echo 0
+}
+
+function selectImage
+{
+  declare -a IMG_DIRS=($(for dir in `ls -d $VM_DIR/*/` ; do echo `basename $dir` ; done))
+  N_IMG_DIRS=${#IMG_DIRS[@]}
+  [ "$1" ] && choice=$1 || choice=$((-1))
+  until (($(isValidSelection)))
+  do for img_dir_n in "${!IMG_DIRS[@]}"; do echo "$(($img_dir_n+1))) ${IMG_DIRS[$img_dir_n]}" ; done
+     echo -n "choice (1-$N_IMG_DIRS, 0=quit): " ; read choice ;
+     ((! $(isValidSelection))) && clear && echo "selection ($choice) out of range"
+  done
+  (($choice == 0)) && exit
+  img_dir=${IMG_DIRS[$(($choice-1))]}
+}
+
+function waitSsh
+{
+  while (($WAIT_SSH > 0))
+  do WAIT_SSH=($WAIT_SSH-1)
+    clear ; echo "logging in ssh in $(($WAIT_SSH+1)) seconds" ;
+    sleep 1
+  done
+}
+
+
+IMG="$1"
+until [ -f "$IMG" -a "`echo $IMG | grep -E '.+\.img$'`" == "$IMG" ]
+do selectImage
+   IMG=$VM_DIR/$img_dir/$img_dir.img
+   [ ! -f "$IMG" ] && clear && echo "HD image '$IMG' not found"
+done
+
+
+QEMU="qemu-system-x86_64 -enable-kvm"
+# QEMU="qemu-system-i386 -enable-kvm"
+HD="-drive file=$IMG,format=raw,cache=writeback"
+# BOOT="-boot menu=on"
+# BOOT="-boot order=d"
+# ISO=
+[ -f "$ISO" ] && CD="-cdrom $ISO" || CD=""
+MEM="-m 2G"
+VGA="-vga cirrus"
+AUDIO="-soundhw hda"
+MISC="-show-cursor"
+SSH_PORT=$VM_SSH_PORT
+FWD_SSH=",hostfwd=tcp::$SSH_PORT-:22"
+FWD_WEB=",hostfwd=tcp::8080-:80"
+NET="-netdev user,id=vmnic$FWD_SSH$FWD_WEB -device virtio-net,netdev=vmnic"
+SSH="ssh -o StrictHostKeyChecking=no -p $SSH_PORT $VM_SSH_LOGIN@localhost"
+# SSH="-redir tcp:$SSH_PORT::22" # deprecated - no virtio
+WAIT_SSH=30
+
+
+virtio_modules=`lsmod | grep virtio`
+[ "`echo $virtio_modules | grep virtio_net`"    == "" ] && su -c 'modprobe virtio-net'
+#[ "`echo $virtio_modules | grep virtio_blk`"     == "" ] && su -c 'modprobe virtio-blk'
+#[ "`echo $virtio_modules | grep virtio_scsi`"    == "" ] && su -c 'modprobe virtio-scsi'
+#[ "`echo $virtio_modules | grep virtio_serial`"  == "" ] && su -c 'modprobe virtio-serial'
+#[ "`echo $virtio_modules | grep virtio_balloon`" == "" ] && su -c 'modprobe virtio-balloon'
+
+echo "launching vm: '$img_dir'"
+if [ "$FWD_SSH" -a "$WAIT_SSH" -gt "0" -a "$VM_SSH_LOGIN" ]
+then $QEMU $MEM $HD $CD $BOOT $VGA $AUDIO $MISC $NET & waitSsh && $SSH
+else $QEMU $MEM $HD $CD $BOOT $VGA $AUDIO $MISC $NET
+fi
