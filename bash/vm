@@ -3,16 +3,38 @@
 
 read -r -d '' USAGE <<-'USAGE_END'
 USAGE:
-        vm
-        vm <img>
-        vm <img-dir>
+
+        vm [ -h | --help | <img> | <img-dir> | -l | --list | <n> ]
 
     where: <img> is the path to an .img file
     where: <img-dir> is one of `ls -d $VM_DIR/*/`
+    where: <n> is one of the numbered selections of `vm --list`
 
-    NOTE: VM_DIR and VM_SSH_PORT must be defined in the environment
+
+EXAMPLES:
+
+        vm -h (or --help)  # present this message then quit
+        vm /home/me/vm.img # launch a VM by absolute or relative path to an image file
+        vm img-dir         # launch $VM_DIR/img-dir/img-dir.img if it exists
+        vm -l (or --list)  # present a alphabetical list of VMs then quit
+        vm 1               # launch a VM by it's current order number from `vm --list`
+        vm                 # present a alphabetical list of VMs and wait for choice
+        VM_SSH_PORT=   vm  # do not forward ssh
+        VM_HTTP_PORT=  vm  # do not forward http
+        VM_SSH_LOGIN=  vm  # forward ssh but do not login (blocks console)
+        VM_WAIT_SSH=60 vm  # forward ssh and wait N seconds to login
+
+
+ENVIRONMENT:
+
+    * VM_DIR       - (mandatory) full path to parent directory of VM subdirectories
+    * VM_SSH_PORT  - (optional) external port to bind to internal port tcp/22
+    * VM_HTTP_PORT - (optional) external port to bind to internal port tcp/80
+    * VM_SSH_LOGIN - (optional) internal ssh user to login (if VM_SSH_PORT defined)
 USAGE_END
-[ -z "$VM_DIR" -o -z "$VM_SSH_PORT" ] && echo "$USAGE" && exit
+[ "$1" == "-l" -o "$1" == "--list"   ] && HAS_LIST_SWITCH=1
+[ "$1" == "-h" -o "$1" == "--help"   ] && HAS_HELP_SWITCH=1
+[ -z "$VM_DIR" -o "$HAS_HELP_SWITCH" ] && echo "$USAGE" && exit
 
 
 function isValidSelection
@@ -24,11 +46,15 @@ function selectImage
 {
   declare -a IMG_DIRS=($(for dir in `ls -d $VM_DIR/*/` ; do echo `basename $dir` ; done))
   N_IMG_DIRS=${#IMG_DIRS[@]}
-  [ "$1" ] && choice=$1 || choice=$((-1))
+  [ "`echo $1 | grep -E '^[0-9]+$'`" ] && choice=$1 || choice=-1
+
   until (($(isValidSelection)))
   do for img_dir_n in "${!IMG_DIRS[@]}"; do echo "$(($img_dir_n+1))) ${IMG_DIRS[$img_dir_n]}" ; done
-     echo -n "choice (1-$N_IMG_DIRS, 0=quit): " ; read choice ;
-     ((! $(isValidSelection))) && clear && echo "selection ($choice) out of range"
+     if [ "$1" != "--list" ]
+     then echo -n "choice (1-$N_IMG_DIRS, 0=quit): " ; read choice ;
+          ((! $(isValidSelection))) && clear && echo "selection ($choice) out of range"
+     else choice=0
+     fi
   done
   (($choice == 0)) && exit
   img_dir=${IMG_DIRS[$(($choice-1))]}
@@ -38,40 +64,44 @@ function waitSsh
 {
   while (($WAIT_SSH > 0))
   do WAIT_SSH=($WAIT_SSH-1)
-    clear ; echo "logging in ssh in $(($WAIT_SSH+1)) seconds" ;
-    sleep 1
+     clear ; echo "logging in ssh in $(($WAIT_SSH+1)) seconds" ;
+     sleep 1
   done
 }
 
 
-IMG="$1"
-until [ -f "$IMG" -a "`echo $IMG | grep -E '.+\.img$'`" == "$IMG" ]
-do selectImage
+# determine which VM image to launch
+[ -f "$1" -a "`echo $1 | grep -E '^.+\.img$'`" == "$1" ] && IMG="$1"
+[ -f "$VM_DIR/$1/$1.img"                               ] && IMG="$VM_DIR/$1/$1.img"
+until [ -f "$IMG" ]
+do selectImage "$1"
    IMG=$VM_DIR/$img_dir/$img_dir.img
    [ ! -f "$IMG" ] && clear && echo "HD image '$IMG' not found"
 done
 
-
+# prepare the environment
 QEMU="qemu-system-x86_64 -enable-kvm"
 # QEMU="qemu-system-i386 -enable-kvm"
 HD="-drive file=$IMG,format=raw,cache=writeback"
-# BOOT="-boot menu=on"
-# BOOT="-boot order=d"
 # ISO=
+# BOOT="-boot menu=on"
 [ -f "$ISO" ] && CD="-cdrom $ISO" || CD=""
+[ -f "$ISO" ] && BOOT="-boot order=d"
 MEM="-m 2G"
-VGA="-vga cirrus"
+VGA="-vga std" # cirrus, qxl, std, vmware
 AUDIO="-soundhw hda"
 MISC="-show-cursor"
-SSH_PORT=$VM_SSH_PORT
-FWD_SSH=",hostfwd=tcp::$SSH_PORT-:22"
-FWD_WEB=",hostfwd=tcp::8080-:80"
-NET="-netdev user,id=vmnic$FWD_SSH$FWD_WEB -device virtio-net,netdev=vmnic"
-SSH="ssh -o StrictHostKeyChecking=no -p $SSH_PORT $VM_SSH_LOGIN@localhost"
-# SSH="-redir tcp:$SSH_PORT::22" # deprecated - no virtio
-WAIT_SSH=30
+[ "$VM_SSH_PORT"  ] && FWD_SSH=",hostfwd=tcp::$VM_SSH_PORT-:22"   || FWD_SSH=''
+[ "$VM_HTTP_PORT" ] && FWD_HTTP=",hostfwd=tcp::$VM_HTTP_PORT-:80" || FWD_HTTP=''
+NET="-netdev user,id=vmnic$FWD_SSH$FWD_HTTP -device virtio-net,netdev=vmnic"
+SSH="ssh -o StrictHostKeyChecking=no -p $VM_SSH_PORT $VM_SSH_LOGIN@localhost"
+# SSH="-redir tcp:$VM_SSH_PORT::22" # deprecated - no virtio
+[ "$VM_SSH_PORT" -o "$VM_HTTP_PORT"          ] || NET=''
+[ "$VM_SSH_PORT" -a "$VM_SSH_LOGIN"          ] || SSH=''
+[ "`echo $VM_WAIT_SSH | grep -E '^[1-9]+$'`" ] || WAIT_SSH=30
 
 
+# load virtio kernel modules
 virtio_modules=`lsmod | grep virtio`
 [ "`echo $virtio_modules | grep virtio_net`"    == "" ] && su -c 'modprobe virtio-net'
 #[ "`echo $virtio_modules | grep virtio_blk`"     == "" ] && su -c 'modprobe virtio-blk'
@@ -79,8 +109,9 @@ virtio_modules=`lsmod | grep virtio`
 #[ "`echo $virtio_modules | grep virtio_serial`"  == "" ] && su -c 'modprobe virtio-serial'
 #[ "`echo $virtio_modules | grep virtio_balloon`" == "" ] && su -c 'modprobe virtio-balloon'
 
-echo "launching vm: '$img_dir'"
-if [ "$FWD_SSH" -a "$WAIT_SSH" -gt "0" -a "$VM_SSH_LOGIN" ]
+# launch VM and optionally login ssh
+echo "launching vm: '`echo "$IMG" | grep -E '^.+\.img$'| sed -e 's/^\(.*\/\)\?\(.*\).img$/\2/'`'"
+if [ "$SSH" -a "$WAIT_SSH" ]
 then $QEMU $MEM $HD $CD $BOOT $VGA $AUDIO $MISC $NET & waitSsh && $SSH
 else $QEMU $MEM $HD $CD $BOOT $VGA $AUDIO $MISC $NET
 fi
