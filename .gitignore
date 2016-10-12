@@ -16,7 +16,6 @@ ruby/*
 !ruby/apt-remove-old-kernels
 !ruby/fiflist
 !ruby/gits
-!ruby/udoc
 
 
 !gm/
