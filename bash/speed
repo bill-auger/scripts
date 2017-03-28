@@ -1,9 +1,11 @@
 #!/bin/bash
 
+# IF='eth0'
+IF=`ls /sys/class/net/ | grep -E '^wl'`
 IVL=3
 KB_SCALE=$(($IVL*125)) # bytes => kbits
-UP_STATS_FILE=/sys/class/net/eth0/statistics/tx_bytes
-DOWN_STATS_FILE=/sys/class/net/eth0/statistics/rx_bytes
+UP_STATS_FILE=/sys/class/net/$IF/statistics/tx_bytes
+DOWN_STATS_FILE=/sys/class/net/$IF/statistics/rx_bytes
 if [ "$1" == "--up" ]
 then DIR="up"   ; STATS_FILE=$UP_STATS_FILE
 else DIR="down" ; STATS_FILE=$DOWN_STATS_FILE
@@ -14,7 +16,8 @@ total_bytes=`cat $STATS_FILE`
 prev_bytes=$total_bytes
 
 while ((1))
-do sleep $IVL ;
+do sleep $IVL
+spd-say hello
    total_bytes=`cat $STATS_FILE`
    bytes=$(($total_bytes-$prev_bytes))
    kbps=$(($bytes/$KB_SCALE))
