@@ -4,8 +4,8 @@ SHOULD_SHOW_ALL    = (ARGV.include? '-a') || (ARGV.include? '--all'        )
 SHOULD_FILTER_NONE = (ARGV.include? '-d') || (ARGV.include? '--deinstalled')
 N_RESULTS          = 12
 QUERY_CMD          = "dpkg-query -W --showformat='${Installed-Size} ${Package} ${Status}\n'"
-SORT_ASC_CMD       = 'sort -n'
-SORT_DES_CMD       = 'sort -nr'
+SORT_ASC_CMD       = "sort -n"
+SORT_DES_CMD       = "sort -nr"
 SORT_CMD           = SHOULD_SHOW_ALL ? SORT_ASC_CMD : SORT_DES_CMD
 
 
@@ -16,15 +16,15 @@ indexed_packages = (`#{QUERY_CMD} | #{SORT_CMD}`.split "\n").map do | ea |
 end
 
 # filter installed packages
-longest_installed_name = 0
 n_packages             = 0
+longest_installed_name = 0
 installed_packages     = indexed_packages.select do | ea |
-  if SHOULD_SHOW_ALL || (n_packages += 1) <= N_RESULTS
+  if SHOULD_SHOW_ALL || n_packages < N_RESULTS
     name_length = ea[:name].size
 
     longest_installed_name = name_length if name_length > longest_installed_name
 
-    ea[:status] == 'installed' || SHOULD_FILTER_NONE
+    (SHOULD_FILTER_NONE || ea[:status] == 'installed') && n_packages += 1
   else false
   end
 end
