@@ -7,33 +7,46 @@
 HEADERS_PREFIX = 'linux-headers-*'
 KERNEL_PREFIX  = 'linux-image-*'
 
-UNAME_CMD  = 'uname -r'
-DPKG_CMD_A = 'dpkg --get-selections'
-DPKG_CMD_B = '| grep -v deinstall'
+UNAME_CMD          = "uname -r"
+APT_SEARCH_CMD     = "apt search"
+GREP_INSTALLED_CMD = "2> /dev/null | grep installed"
+GREP_DEFAULT_CMD   = "cat /boot/grub/grub.cfg | grep 'set default'"
+GREP_ENTRIES_CMD   = "cat /boot/grub/grub.cfg | grep 'menuentry ' | grep -v 'gnulinux-simple-'" # exclude group entries
+APT_REMOVE_CMD     = "sudo apt-get remove"
 
-GREP_DEFAULT_CMD = "cat /boot/grub/grub.cfg | grep 'set default'"
-GREP_ENTRIES_CMD = "cat /boot/grub/grub.cfg | grep 'menuentry ' | grep -v 'gnulinux-simple-'" # exclude group entries
+
+def print_default_grub_entry
+  default_entry = `#{GREP_DEFAULT_CMD}`.split("\"")[1].to_i
+  entries       = `#{GREP_ENTRIES_CMD}`.split "\n"
+  current_entry = entries[default_entry].split(/['"]/)[1]
+  print "current default grub entry:\n\t" + current_entry + "\n\n"
+end
 
 
 # show current kernel
 
-release                = `#{UNAME_CMD}`
-current_kernel_version = release.split('-')[0..-2].join('-')
+current_release        = `#{UNAME_CMD}`.strip
+current_kernel_version = current_release.split('-')[0..-2].join('-')
 
-print "\ncurrent running kernel =\n\t" + release + "\n"
-print "current kernel version =\n\t" + current_kernel_version + "\n\n"
+print "\ncurrent running kernel:\n\t" + current_release        + "\n"
+print "current kernel version:\n\t"   + current_kernel_version + "\n\n"
 
 
 # show list of installed kernels
 
-installed_packages  = `#{DPKG_CMD_A} #{HEADERS_PREFIX} #{DPKG_CMD_B}`.split("\n")
-installed_packages += `#{DPKG_CMD_A} #{KERNEL_PREFIX}  #{DPKG_CMD_B}`.split("\n")
-installed_packages.map! do | ea | ; ea = ea.split(' ')[0] ; end ;
+installed_packages  = `#{APT_SEARCH_CMD} #{HEADERS_PREFIX} #{GREP_INSTALLED_CMD}`.split("\n")
+installed_packages += `#{APT_SEARCH_CMD} #{KERNEL_PREFIX } #{GREP_INSTALLED_CMD}`.split("\n")
+print "installed packages (* indicates current):\n"
+installed_packages.map! do | ea |
+  ea = ea.split(' ')[0].split('/')[0]
 
-print "installed packages =\n\t" + installed_packages.join("\n\t") + "\n\n"
+  print "\t" + ((ea.end_with? current_release) ? "* " : "  ") + ea + "\n"
+  ea
+end
+print "\n"
 
 
-# show list of obsolete kernels to be removed
+# show list of older kernels to be removed
 
 remove_packages = installed_packages.select do | ea |
   (not ea.include? current_kernel_version) && (ea.split '-')[2].to_i > 0
@@ -42,20 +55,22 @@ end
 print "packages to remove =\n\t" + ((remove_packages.size.zero?)? "none" : remove_packages.join("\n\t")) + "\n\n"
 
 
+# show current default grub entry
+
+print_default_grub_entry
+
+
 # run apt
 
 if remove_packages.empty?
-  print "no obsolete kernels installed" + "\n\n"
+  print "no older kernels installed" + "\n\n"
 else
   print "remove these " + remove_packages.size.to_s + " packages ?" + "\n\n"
 
-  system 'sudo apt-get remove ' + remove_packages.join(" ")
+  system APT_REMOVE_CMD + " " + remove_packages.join(" ")
 end
 
 
 # show current default grub entry
 
-default_entry = `#{GREP_DEFAULT_CMD}`.split("\"")[1].to_i
-entries       = `#{GREP_ENTRIES_CMD}`.split "\n"
-
-print "default grub entry =\n\t" + entries[default_entry].split(/['"]/)[1] + "\n\n"
+print_default_grub_entry
