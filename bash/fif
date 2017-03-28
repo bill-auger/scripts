@@ -1,30 +1,35 @@
 #!/bin/bash
 
 # fif - Find In Files
-#     this script lists the filenames of all files under <dir> that contain <term>
+#     this script lists the filenames of all files under <DIR> that contain <TERM>
 
 
-dir=$1
-term=$2
-filters=$3
+readonly DIR=$1
+readonly TERM=$2
+readonly USER_FILTER=$3
+readonly DEFAULT_FILTER="~$|\.kate-swp$|\.o$|\.git/"
+[ "$USER_FILTER" ] && FILTER="$USER_FILTER|$DEFAULT_FILTER" || FILTER="$DEFAULT_FILTER"
+read -r -d '' USAGE <<-'USAGE_MSG'
+fif - Find In Files
+
+USAGE:
+    fif <DIR> <TERM> [FILTER]
+
+EXAMPLES:
+    fif /home/user search-term
+    fif . "consecutive words" .bak
+    fif ./src "nonAlphaNumeric(" "\.c$|\.db$"
+
+DESCRIPTION:
+    Search <DIR> recursively for all files containing <TERM>
+    Returns names of files containing <TERM> (excluding <FILTER> regex match)
+    <TERM> and <FILTER> must be quoted in all but the simplest cases
+    Default filters are: *~, *.kate-swp, *.o, *.git/*
+USAGE_MSG
 
 
-FILTERS="*.~|*.kate-swp|*.o^|.git/"
-if [ $filters ] ; then FILTERS="$FILTERS|$filters" ; fi ;
-USAGE="fif - find in files"
-USAGE="$USAGE\n\nusage: fif <dir> <term> [\"filter1[|filter2][...]\"]"
-USAGE="$USAGE\ne.g."
-USAGE="$USAGE\n\tfif /home/me searchterm"
-USAGE="$USAGE\n\tfif . \"unsigned int aVar\" .bak"
-USAGE="$USAGE\n\tfif ./src \"aFunction(\" \".bak|.db\""
-USAGE="$USAGE\n\ndescription: search <dir> recursively for all files containing <term>"
-USAGE="$USAGE\nreturns: filenames containing <term>"
-USAGE="$USAGE\ncaveats: <term> must be a single word"
-USAGE="$USAGE\ndefault filters: `echo $FILTERS | tr "^" " " | tr \"|\" \" \"`\n"
-
-
-case $term in
-  "" ) printf "$USAGE" ;;
-  *  ) find $dir | xargs grep "$term" -sl | grep -v -E "$FILTERS" ;;
+case $TERM in
+  "" ) printf "$USAGE\n" ;;
+  *  ) find $DIR | xargs grep -ls "$TERM" | grep -v -E "$FILTER" ;;
 esac
 
