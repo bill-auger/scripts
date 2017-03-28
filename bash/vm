@@ -11,26 +11,35 @@ USAGE:
     where: <n> is one of the numbered selections of `vm --list`
 
 
-EXAMPLES:
-
-        vm -h (or --help)  # present this message then quit
-        vm /home/me/vm.img # launch a VM by absolute or relative path to an image file
-        vm img-dir         # launch $VM_DIR/img-dir/img-dir.img if it exists
-        vm -l (or --list)  # present a alphabetical list of VMs then quit
-        vm 1               # launch a VM by it's current order number from `vm --list`
-        vm                 # present a alphabetical list of VMs and wait for choice
-        VM_SSH_PORT=   vm  # do not forward ssh
-        VM_HTTP_PORT=  vm  # do not forward http
-        VM_SSH_LOGIN=  vm  # forward ssh but do not login (blocks console)
-        VM_WAIT_SSH=60 vm  # forward ssh and wait N seconds to login
-
-
 ENVIRONMENT:
 
     * VM_DIR       - (mandatory) full path to parent directory of VM subdirectories
+    * ARCH         - (optional) if == 'i386' launches qemu-system-$ARCH (default 'x86_64 -enable-kvm')
+    * MEM          - (optional) specifies VM memory size (default 2G)
+    * ISO          - (optional) .iso file for first optical disc - set as primary boot media (default none)
+    * IMG_B        - (optional) .img file for second hard disk (default none)
     * VM_SSH_PORT  - (optional) external port to bind to internal port tcp/22
     * VM_HTTP_PORT - (optional) external port to bind to internal port tcp/80
-    * VM_SSH_LOGIN - (optional) internal ssh user to login (if VM_SSH_PORT defined)
+    * VM_SSH_LOGIN - (optional) internal ssh user to login (if VM_SSH_PORT and VM_WAIT_SSH defined)
+    * VM_WAIT_SSH  - (optional) pause before ssh login (if VM_SSH_PORT and VM_SSH_LOGIN defined)
+
+
+EXAMPLES:
+
+    vm -h (or --help)      # present this message then quit
+    vm /home/me/vm.img     # launch a VM by absolute or relative path to an image file
+    vm img-dir             # launch $VM_DIR/img-dir/img-dir.img if it exists
+    vm -l (or --list)      # present a alphabetical list of VMs then quit
+    vm 1                   # launch a VM by it's current order number from `vm --list`
+    vm                     # present a alphabetical list of VMs and wait for choice
+    ARCH=i386          vm  # launch 32-bit x86 VM
+    MEM=1G             vm  # launch VM using 1GB of system memory
+    ISO=/path/to/iso   vm  # boot from .iso file
+    IMG_B=/path/to/img vm  # mount second hard disk
+    VM_SSH_PORT=       vm  # do not forward ssh
+    VM_HTTP_PORT=      vm  # do not forward http
+    VM_SSH_LOGIN=      vm  # forward ssh but do not login
+    VM_WAIT_SSH=60     vm  # wait N seconds to login
 USAGE_END
 [ "$1" == "-l" -o "$1" == "--list"   ] && HAS_LIST_SWITCH=1
 [ "$1" == "-h" -o "$1" == "--help"   ] && HAS_HELP_SWITCH=1
@@ -62,6 +71,7 @@ function selectImage
 
 function waitSsh
 {
+  ssh-keygen -f "~/.ssh/known_hosts" -R [localhost]:$VM_SSH_PORT
   while (($WAIT_SSH > 0))
   do WAIT_SSH=($WAIT_SSH-1)
      clear ; echo "logging in ssh in $(($WAIT_SSH+1)) seconds" ;
@@ -80,25 +90,27 @@ do selectImage "$1"
 done
 
 # prepare the environment
-QEMU="qemu-system-x86_64 -enable-kvm"
-# QEMU="qemu-system-i386 -enable-kvm"
-HD="-drive file=$IMG,format=raw,cache=writeback"
-# ISO=
 # BOOT="-boot menu=on"
-[ -f "$ISO" ] && CD="-cdrom $ISO" || CD=""
-[ -f "$ISO" ] && BOOT="-boot order=d"
-MEM="-m 2G"
-VGA="-vga std" # cirrus, qxl, std, vmware
-AUDIO="-soundhw hda"
-MISC="-show-cursor"
-[ "$VM_SSH_PORT"  ] && FWD_SSH=",hostfwd=tcp::$VM_SSH_PORT-:22"   || FWD_SSH=''
-[ "$VM_HTTP_PORT" ] && FWD_HTTP=",hostfwd=tcp::$VM_HTTP_PORT-:80" || FWD_HTTP=''
+[ "$ARCH" == "i386" ] || ARCH="x86_64 -enable-kvm"
+[ "$img_dir"        ] && NAME="-name $img_dir"
+[ "$IMG_B"          ] && HD="-drive file=$IMG_B,format=raw,cache=writeback"
+[ -f "$ISO"         ] && BOOT="-boot order=d"
+[ -f "$ISO"         ] && CD="-cdrom $ISO"                                      || CD=""
+[ "$MEM"            ] && MEM="-m $MEM"                                         || MEM="-m 2G"
+[ "$VGA"            ] && VGA="-vga $VGA"                                       || VGA="-vga std" # cirrus, qxl, std, vmware
+[ "$VM_SSH_PORT"    ] && FWD_SSH=",hostfwd=tcp::$VM_SSH_PORT-:22"              || FWD_SSH=''
+[ "$VM_HTTP_PORT"   ] && FWD_HTTP=",hostfwd=tcp::$VM_HTTP_PORT-:$VM_HTTP_PORT" || FWD_HTTP=''
+QEMU="qemu-system-$ARCH $NAME"
+HD="-drive file=$IMG,format=raw,cache=writeback $HD"
 NET="-netdev user,id=vmnic$FWD_SSH$FWD_HTTP -device virtio-net,netdev=vmnic"
 SSH="ssh -o StrictHostKeyChecking=no -p $VM_SSH_PORT $VM_SSH_LOGIN@localhost"
 # SSH="-redir tcp:$VM_SSH_PORT::22" # deprecated - no virtio
 [ "$VM_SSH_PORT" -o "$VM_HTTP_PORT"          ] || NET=''
 [ "$VM_SSH_PORT" -a "$VM_SSH_LOGIN"          ] || SSH=''
 [ "`echo $VM_WAIT_SSH | grep -E '^[1-9]+$'`" ] || WAIT_SSH=30
+AUDIO="-soundhw hda"
+MISC="-show-cursor"
+# DISP='-display sdl -no-frame'
 
 
 # load virtio kernel modules
@@ -109,9 +121,13 @@ virtio_modules=`lsmod | grep virtio`
 #[ "`echo $virtio_modules | grep virtio_serial`"  == "" ] && su -c 'modprobe virtio-serial'
 #[ "`echo $virtio_modules | grep virtio_balloon`" == "" ] && su -c 'modprobe virtio-balloon'
 
+echo $QEMU $MEM $HD $CD $BOOT $VGA $AUDIO $MISC $NET
+
 # launch VM and optionally login ssh
 echo "launching vm: '`echo "$IMG" | grep -E '^.+\.img$'| sed -e 's/^\(.*\/\)\?\(.*\).img$/\2/'`'"
+[ "$FWD_SSH"  ] && echo "SSH port 22 forwarded to localhost:$VM_SSH_PORT"
+[ "$FWD_HTTP" ] && echo "HTTP port $VM_HTTP_PORT forwarded to localhost:$VM_HTTP_PORT"
 if [ "$SSH" -a "$WAIT_SSH" ]
-then $QEMU $MEM $HD $CD $BOOT $VGA $AUDIO $MISC $NET & waitSsh && $SSH
-else $QEMU $MEM $HD $CD $BOOT $VGA $AUDIO $MISC $NET
+then $QEMU $MEM $HD $CD $BOOT $VGA $AUDIO $MISC $NET $DISP & waitSsh && $SSH
+else $QEMU $MEM $HD $CD $BOOT $VGA $AUDIO $MISC $NET $DISP
 fi
