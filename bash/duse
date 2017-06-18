@@ -6,11 +6,11 @@ COL_W=8
 
 
 if   [ "$1" == "" ] ; then base_dir=`pwd` ;
-elif [ ! -d "$1" ]  ; then printf "$USAGE" ; exit ;
+elif [ ! -d "$1"  ] ; then printf "$USAGE" ; exit ;
 else                  base_dir=$1 ; fi ;
 
 # get absolute path
-path=`realpath $base_dir 2> /dev/null`
+path=`realpath "$base_dir" 2> /dev/null`
 if [ "$path" == "" ] ; then path=$base_dir ; fi
 
 # display directory usage
@@ -19,10 +19,10 @@ printf "MB used | dir\n"
 printf "%s\n" "--------|----"
 while read line
 do
-  free_mb=`echo $line | awk '{ print $1 }'`
-  directory=`echo $line | awk '{ print $2 }'`
+  free_mb=`echo $line | cut -d ' ' -f 1`
+  directory=`echo $line | cut -d ' ' -f 2-`
   pad_w=$(($COL_W - ${#free_mb}))
-  printf "%s%${pad_w}s| used in %s\n" $free_mb "" $directory
+  printf "%s%${pad_w}s| used in %s\n" "$free_mb" "" "$directory"
 done < <(du "$base_dir" --max-depth=1 --block-size=1M | sort -n)
 
 # display per partition free space
