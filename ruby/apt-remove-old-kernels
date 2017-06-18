@@ -4,8 +4,8 @@
 #     and give the option to remove all but the current set
 
 
-HEADERS_PREFIX = 'linux-headers-*'
-KERNEL_PREFIX  = 'linux-image-*'
+HEADERS_REGEX = '^linux-headers-'
+KERNEL_REGEX  = '^linux-image-'
 
 UNAME_CMD          = "uname -r"
 APT_SEARCH_CMD     = "apt search"
@@ -14,6 +14,8 @@ GREP_DEFAULT_CMD   = "cat /boot/grub/grub.cfg | grep 'set default'"
 GREP_ENTRIES_CMD   = "cat /boot/grub/grub.cfg | grep 'menuentry ' | grep -v 'gnulinux-simple-'" # exclude group entries
 APT_REMOVE_CMD     = "sudo apt-get remove"
 
+
+# helpers
 
 def print_default_grub_entry
   default_entry = `#{GREP_DEFAULT_CMD}`.split("\"")[1].to_i
@@ -34,8 +36,9 @@ print "current kernel version:\n\t"   + current_kernel_version + "\n\n"
 
 # show list of installed kernels
 
-installed_packages  = `#{APT_SEARCH_CMD} #{HEADERS_PREFIX} #{GREP_INSTALLED_CMD}`.split("\n")
-installed_packages += `#{APT_SEARCH_CMD} #{KERNEL_PREFIX } #{GREP_INSTALLED_CMD}`.split("\n")
+installed_packages  = `#{APT_SEARCH_CMD} #{HEADERS_REGEX} #{GREP_INSTALLED_CMD}`.split("\n")
+installed_packages += `#{APT_SEARCH_CMD} #{KERNEL_REGEX } #{GREP_INSTALLED_CMD}`.split("\n")
+
 print "installed packages (* indicates current):\n"
 installed_packages.map! do | ea |
   ea = ea.split(' ')[0].split('/')[0]
