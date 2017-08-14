@@ -17,11 +17,14 @@ USAGE           = "USAGE:\n"                                                    
 
 unless SEARCH_TERM ; print USAGE ; exit ; end ;
 
-fif_cmd  = "fif \"#{SEARCH_PATH}\" \"#{SEARCH_TERM}\" \"#{EXCLUDE_TERM}\""
-fif_list = `#{fif_cmd}`.split "\n"
+fif_cmd = "fif \"#{SEARCH_PATH}\" \"#{SEARCH_TERM}\" \"#{EXCLUDE_TERM}\""
+files   = `#{fif_cmd}`.split "\n"
 
-fif_list.each do |ea|
-  print "\n#{ea}\n"
-  system "cat #{ea} | grep -n \"#{SEARCH_TERM}\""
-  system "cat #{ea} | grep -n \"#{COINCIDENT_TERM}\"" unless COINCIDENT_TERM.nil?
+files.each do | file |
+  print "\nin #{file}:\n"
+  lines = `cat #{file} | grep -n "#{SEARCH_TERM}"`.split "\n"
+  lines.each { | line | print "  #{file}:#{line.sub ':' , ': '}\n" }
+
+  lines = `cat #{file} | grep -n "#{COINCIDENT_TERM}"`.split "\n"
+  lines.each { | line | print "  #{file}:#{line.sub ':' , ': '}\n" } unless COINCIDENT_TERM.nil?
 end
