@@ -53,7 +53,8 @@ function isValidSelection
 
 function selectImage
 {
-  declare -a IMG_DIRS=($(for dir in `ls -d $VM_DIR/*/` ; do echo `basename $dir` ; done))
+#   declare -a IMG_DIRS=($(for dir in `ls -d $VM_DIR/*/*.img` ; do echo `basename $dir` ; done))
+  declare -a IMG_DIRS=($(for img in `ls -d $VM_DIR/*/*.img` ; do dir=`dirname $img` ; echo `basename $img` | grep "^`basename $dir`\.img$" > /dev/null && echo `basename $dir` ; done))
   N_IMG_DIRS=${#IMG_DIRS[@]}
   [ "`echo $1 | grep -E '^[0-9]+$'`" ] && choice=$1 || choice=-1
 
