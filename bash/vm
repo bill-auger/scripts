@@ -48,13 +48,13 @@ USAGE_END
 
 function isValidSelection
 {
-  [ $choice -ge "0" -a $choice -le $N_IMG_DIRS ] && echo 1 || echo 0
+  [ "$choice" ] || choice=0
+  [ "$choice" -ge "0" -a $choice -le $N_IMG_DIRS ] && echo 1 || echo 0
 }
 
 function selectImage
 {
-#   declare -a IMG_DIRS=($(for dir in `ls -d $VM_DIR/*/*.img` ; do echo `basename $dir` ; done))
-  declare -a IMG_DIRS=($(for img in `ls -d $VM_DIR/*/*.img` ; do dir=`dirname $img` ; echo `basename $img` | grep "^`basename $dir`\.img$" > /dev/null && echo `basename $dir` ; done))
+  declare -a IMG_DIRS=($(for img in `ls -d $VM_DIR/*/*.img 2> /dev/null` ; do dir=`dirname $img` ; echo `basename $img` | grep "^`basename $dir`\.img$" > /dev/null && echo `basename $dir` ; done))
   N_IMG_DIRS=${#IMG_DIRS[@]}
   [ "`echo $1 | grep -E '^[0-9]+$'`" ] && choice=$1 || choice=-1
 
@@ -62,11 +62,12 @@ function selectImage
   do for img_dir_n in "${!IMG_DIRS[@]}"; do echo "$(($img_dir_n+1))) ${IMG_DIRS[$img_dir_n]}" ; done
      if [ "$1" != "--list" ]
      then echo -n "choice (1-$N_IMG_DIRS, 0=quit): " ; read choice ;
-          ((! $(isValidSelection))) && clear && echo "selection ($choice) out of range"
+          ((! $(isValidSelection)))  && echo "selection ($choice) out of range"
      else choice=0
      fi
   done
-  (($choice == 0)) && exit
+  (($N_IMG_DIRS)) || echo "no suitable images found in \$VM_DIR '$VM_DIR'"
+  (($choice    )) || exit
   img_dir=${IMG_DIRS[$(($choice-1))]}
 }
 
@@ -111,7 +112,7 @@ SSH="ssh -o StrictHostKeyChecking=no -p $VM_SSH_PORT $VM_SSH_LOGIN@localhost"
 [ "`echo $VM_WAIT_SSH | grep -E '^[1-9]+$'`" ] || WAIT_SSH=30
 AUDIO="-soundhw hda"
 MISC="-show-cursor"
-# DISP='-display sdl -no-frame'
+DISP='-display sdl -no-frame'
 
 
 # load virtio kernel modules
@@ -122,13 +123,14 @@ virtio_modules=`lsmod | grep virtio`
 #[ "`echo $virtio_modules | grep virtio_serial`"  == "" ] && su -c 'modprobe virtio-serial'
 #[ "`echo $virtio_modules | grep virtio_balloon`" == "" ] && su -c 'modprobe virtio-balloon'
 
-echo $QEMU $MEM $HD $CD $BOOT $VGA $AUDIO $MISC $NET
 
 # launch VM and optionally login ssh
-echo "launching vm: '`echo "$IMG" | grep -E '^.+\.img$'| sed -e 's/^\(.*\/\)\?\(.*\).img$/\2/'`'"
+echo "launching vm: '`echo "$IMG" | grep -E '^.+\.img$' | sed -e 's/^\(.*\/\)\?\(.*\).img$/\2/'`'"
+CMD="$QEMU $MEM $HD $CD $BOOT $VGA $AUDIO $MISC $NET $DISP"
+echo "$CMD"
 [ "$FWD_SSH"  ] && echo "SSH port 22 forwarded to localhost:$VM_SSH_PORT"
 [ "$FWD_HTTP" ] && echo "HTTP port $VM_HTTP_PORT forwarded to localhost:$VM_HTTP_PORT"
 if [ "$SSH" -a "$WAIT_SSH" ]
-then $QEMU $MEM $HD $CD $BOOT $VGA $AUDIO $MISC $NET $DISP & waitSsh && $SSH
-else $QEMU $MEM $HD $CD $BOOT $VGA $AUDIO $MISC $NET $DISP
+then $CMD & waitSsh && $SSH
+else $CMD
 fi
