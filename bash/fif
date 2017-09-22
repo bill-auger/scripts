@@ -7,7 +7,7 @@
 readonly DIR=$1
 readonly TERM=$2
 readonly USER_FILTER=$3
-readonly DEFAULT_FILTER="~$|\.kate-swp$|\.o$|\.git/"
+readonly DEFAULT_FILTER="~$|\.kate-swp$|\.o$|\.git/|\.Po$"
 [ "$USER_FILTER" ] && FILTER="$USER_FILTER|$DEFAULT_FILTER" || FILTER="$DEFAULT_FILTER"
 read -r -d '' USAGE <<-'USAGE_MSG'
 fif - Find In Files
