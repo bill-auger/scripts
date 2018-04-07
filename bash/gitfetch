@@ -1,0 +1,11 @@
+#!/bin/bash
+
+
+echo      "---------- git-branch-status before --------->"
+git-branch-status
+
+echo -e "\n----------     git-fetch --all      --------->\n"
+git fetch --all
+
+echo -e "\n---------- git-branch-status after  --------->"
+git-branch-status

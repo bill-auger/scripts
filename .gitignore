@@ -4,6 +4,7 @@
 bash/*
 !bash/duse
 !bash/fif
+!bash/gitfetch
 !bash/guake-quick-open.sh
 !bash/pkuse
 !bash/speed
