@@ -46,6 +46,8 @@ USAGE_END
 [ -z "$VM_DIR" -o "$HAS_HELP_SWITCH" ] && echo "$USAGE" && exit
 
 
+function doesImgExist { [ -f "$1" -a "$(echo $1 | grep -E '^.+\.img$')" == "$1" ] ; }
+
 function isValidSelection
 {
   [ "$choice" ] || choice=0
@@ -83,26 +85,28 @@ function waitSsh
 
 
 # determine which VM image to launch
-[ -f "$1" -a "`echo $1 | grep -E '^.+\.img$'`" == "$1" ] && IMG="$1"
-[ -f "$VM_DIR/$1/$1.img"                               ] && IMG="$VM_DIR/$1/$1.img"
-until [ -f "$IMG" ]
-do selectImage "$1"
-   IMG=$VM_DIR/$img_dir/$img_dir.img
-   [ ! -f "$IMG" ] && clear && echo "HD image '$IMG' not found"
+for img in "$1" "$VM_DIR/$1/$1.img" ; do doesImgExist $img && IMG=$img ; done ;
+[ "$IMG" ] || echo "IMG not found at '$img' or '$VM_DIR/$1/$1.img'"
+until doesImgExist $IMG
+do    selectImage $1
+      IMG=$VM_DIR/$img_dir/$img_dir.img
+      ! doesImgExist $IMG && clear && echo "HD image '$img' not found"
 done
 
 # prepare the environment
 # BOOT="-boot menu=on"
-[ "$ARCH" == "i386" ] || ARCH="x86_64 -enable-kvm"
-[ "$img_dir"        ] && NAME="-name $img_dir"
-[ "$IMG_B"          ] && HD="-drive file=$IMG_B,format=raw,cache=writeback"
-[ -f "$ISO"         ] && BOOT="-boot order=d"
-[ -f "$ISO"         ] && CD="-cdrom $ISO"                                      || CD=""
-[ "$MEM"            ] && MEM="-m $MEM"                                         || MEM="-m 2G"
-[ "$VGA"            ] && VGA="-vga $VGA"                                       || VGA="-vga std" # cirrus, qxl, std, vmware
-[ "$VM_SSH_PORT"    ] && FWD_SSH=",hostfwd=tcp::$VM_SSH_PORT-:22"              || FWD_SSH=''
-[ "$VM_HTTP_PORT"   ] && FWD_HTTP=",hostfwd=tcp::$VM_HTTP_PORT-:$VM_HTTP_PORT" || FWD_HTTP=''
+N_CORES=2 N_THREADS=1 N_SOCKETS=1 SMP_REGEX="^[0-9],[0-9],[0-9]$"
+[ "$ARCH" != "i386"    ] && ARCH="x86_64 -enable-kvm"
+[ "$img_dir"           ] && NAME="-name $img_dir"
+[ "$IMG_B"             ] && HD="-drive file=$IMG_B,format=raw,cache=writeback"
+[[ $SMP =~ $SMP_REGEX ]] && N_CORES=${BASH_REMATCH[1]} N_THREADS=${BASH_REMATCH[2]} N_SOCKETS=${BASH_REMATCH[3]}
+[ -f "$ISO"            ] && CD="-cdrom $ISO" BOOT="-boot order=d"                 || CD="" BOOT=""
+[ "$MEM"               ] && MEM="-m $MEM"                                         || MEM="-m 1G"
+[ "$VGA"               ] && VGA="-vga $VGA"                                       || VGA="-vga std" # cirrus, qxl, std, vmware
+[ "$VM_SSH_PORT"       ] && FWD_SSH=",hostfwd=tcp::$VM_SSH_PORT-:22"              || FWD_SSH=''
+[ "$VM_HTTP_PORT"      ] && FWD_HTTP=",hostfwd=tcp::$VM_HTTP_PORT-:$VM_HTTP_PORT" || FWD_HTTP=''
 QEMU="qemu-system-$ARCH $NAME"
+CPU="-cpu host -smp cores=$N_CORES,threads=$N_THREADS,sockets=$N_SOCKETS"
 HD="-drive file=$IMG,format=raw,cache=writeback $HD"
 NET="-netdev user,id=vmnic$FWD_SSH$FWD_HTTP -device virtio-net,netdev=vmnic"
 SSH="ssh -o StrictHostKeyChecking=no -p $VM_SSH_PORT $VM_SSH_LOGIN@localhost"
@@ -111,9 +115,8 @@ SSH="ssh -o StrictHostKeyChecking=no -p $VM_SSH_PORT $VM_SSH_LOGIN@localhost"
 [ "$VM_SSH_PORT" -a "$VM_SSH_LOGIN"          ] || SSH=''
 [ "`echo $VM_WAIT_SSH | grep -E '^[1-9]+$'`" ] || WAIT_SSH=30
 AUDIO="-soundhw hda"
+VIDEO="$VGA -display sdl -no-frame"
 MISC="-show-cursor"
-DISP='-display sdl -no-frame'
-
 
 # load virtio kernel modules
 virtio_modules=`lsmod | grep virtio`
@@ -123,11 +126,12 @@ virtio_modules=`lsmod | grep virtio`
 #[ "`echo $virtio_modules | grep virtio_serial`"  == "" ] && su -c 'modprobe virtio-serial'
 #[ "`echo $virtio_modules | grep virtio_balloon`" == "" ] && su -c 'modprobe virtio-balloon'
 
+# concatenate command line and report
+echo "launching vm: '`echo "$IMG" | grep -E '^.+\.img$' | sed -e 's/^\(.*\/\)\?\(.*\).img$/\2/'`'"
+CMD="$QEMU $CPU $MEM $HD $CD $BOOT $NET $AUDIO $VIDEO $MISC"
+echo "$CMD"
 
 # launch VM and optionally login ssh
-echo "launching vm: '`echo "$IMG" | grep -E '^.+\.img$' | sed -e 's/^\(.*\/\)\?\(.*\).img$/\2/'`'"
-CMD="$QEMU $MEM $HD $CD $BOOT $VGA $AUDIO $MISC $NET $DISP"
-echo "$CMD"
 [ "$FWD_SSH"  ] && echo "SSH port 22 forwarded to localhost:$VM_SSH_PORT"
 [ "$FWD_HTTP" ] && echo "HTTP port $VM_HTTP_PORT forwarded to localhost:$VM_HTTP_PORT"
 if [ "$SSH" -a "$WAIT_SSH" ]
