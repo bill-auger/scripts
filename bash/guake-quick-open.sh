@@ -14,4 +14,5 @@ MY_JUCE_BUILD_DIR=./Builds/Makefile
 [ -f "$NEW_JUCE_BUILD_DIR/$FILE"  ] && FILE="$NEW_JUCE_BUILD_DIR/$FILE"
 [ -f "$MY_JUCE_BUILD_DIR/$FILE"   ] && FILE="$MY_JUCE_BUILD_DIR/$FILE"
 [ -f "src/$FILE"                  ] && FILE="src/$FILE"
+[ -f "plugins/$FILE"              ] && FILE="plugins/$FILE"
 [ -f "$FILE"                      ] && kate "$FILE" --line $LINE
