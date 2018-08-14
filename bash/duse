@@ -13,17 +13,35 @@ else                  base_dir=$1 ; fi ;
 path=`realpath "$base_dir" 2> /dev/null`
 if [ "$path" == "" ] ; then path=$base_dir ; fi
 
+# get results
+while read line
+do
+  free_mb="$( echo $line | cut -d ' ' -f 1)" ; free_mbs=(  ${free_mbs[@]}  "$free_mb"  ) ;
+  dir_name="$(echo $line | cut -d ' ' -f 2)" ; dir_names=( ${dir_names[@]} "$dir_name" ) ;
+  total_dir_free_mb=$(( $total_dir_free_mb + $free_mb ))
+done < <(du "$base_dir" --max-depth=1 --block-size=1 | sort -n)
+
+# compute base dir use
+n_dirs=${#dir_names[@]}
+free_mbs[$n_dirs]=${free_mbs[$(( $n_dirs - 1 ))]}
+dir_names[$n_dirs]="${dir_names[$(( $n_dirs - 1 ))]}/* (total)"
+total_free_mb=${free_mbs[$n_dirs]}
+base_dir_free_mb=$(( $total_free_mb - $(( $total_dir_free_mb - $total_free_mb )) ))
+free_mbs[$(( $n_dirs - 1 ))]=$base_dir_free_mb
+n_dirs=$(( $n_dirs + 1 ))
+
 # display directory usage
 printf "directory sizes under '$path'\n"
 printf "MB used | dir\n"
 printf "%s\n" "--------|----"
-while read line
+for (( dir_n=0 ; dir_n<$n_dirs ; dir_n++ ))
 do
-  free_mb=`echo $line | cut -d ' ' -f 1`
-  directory=`echo $line | cut -d ' ' -f 2-`
-  pad_w=$(($COL_W - ${#free_mb}))
-  printf "%s%${pad_w}s| used in %s\n" "$free_mb" "" "$directory"
-done < <(du "$base_dir" --max-depth=1 --block-size=1M | sort -n)
+  free_mb=$(( ${free_mbs[$dir_n]} / 1024 / 1024 ))
+  dir_name=${dir_names[$dir_n]}
+  pad_w=$(( $COL_W - ${#free_mb} ))
+
+  printf "%s%${pad_w}s| used in %s\n" "$free_mb" "" "$dir_name"
+done
 
 # display per partition free space
 printf "\nfree space per partition\n"
