@@ -8,6 +8,7 @@ bash/*
 !bash/pkuse
 !bash/speed
 !bash/toggle-mic.sh
+!bash/toggle-term.sh
 !bash/vm
 
 
