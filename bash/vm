@@ -15,7 +15,7 @@ ENVIRONMENT:
 
     * VM_DIR       - (mandatory) full path to parent directory of VM subdirectories
     * ARCH         - (optional) if == 'i386' launches qemu-system-$ARCH (default 'x86_64 -enable-kvm')
-    * MEM          - (optional) specifies VM memory size (default 2G)
+    * MEM          - (optional) specifies VM memory size (default 1G)
     * ISO          - (optional) .iso file for first optical disc - set as primary boot media (default none)
     * IMG_B        - (optional) .img file for second hard disk (default none)
     * VM_SSH_PORT  - (optional) external port to bind to internal port tcp/22
@@ -108,33 +108,60 @@ N_CORES=2 N_THREADS=1 N_SOCKETS=1 SMP_REGEX="^[0-9],[0-9],[0-9]$"
 QEMU="qemu-system-$ARCH $NAME"
 CPU="-cpu host -smp cores=$N_CORES,threads=$N_THREADS,sockets=$N_SOCKETS"
 HD="-drive file=$IMG,format=raw,cache=writeback $HD"
-NET="-netdev user,id=vmnic$FWD_SSH$FWD_HTTP -device virtio-net,netdev=vmnic"
+
+# prepare networking
+readonly USE_VIRTIO=0
+readonly USE_VIRTFS=0
+readonly USE_VIRTSMB=0
+SHARED_DIR_DEFAULT=$HOME/.config/vm-shared
+[[ ! -d "$SHARED_DIR" ]] && [[ -d "$SHARED_DIR_DEFAULT" ]] && SHARED_DIR=$SHARED_DIR_DEFAULT
+NET_VIRTIO="-netdev user,id=vmnic$FWD_SSH$FWD_HTTP -device virtio-net,netdev=vmnic"
+NET_VIRTSMB="-net user,smb=\"$SHARED_DIR\" -net nic,model=virtio"
+NET_VIRTFS="-virtfs local,path=\"$SHARED_DIR\",mount_tag=host0,security_model=passthrough,id=host0"
+#     (( $USE_VIRTIO )) && NET="$NET_VIRTIO" || NET=''
+if   ((   $USE_VIRTIO ))
+then NET="$NET_VIRTIO"
+elif ((   $USE_VIRTSMB ))
+then NET="$NET_VIRTSMB"
+elif ((   $USE_VIRTFS ))
+then NET="$NET_VIRTFS" # guest fstab entry: host0 /a-mountpoint 9p trans=virtio,version=9p2000.L 0 0
+else NET=''
+fi
+
+# prepare SSH
 SSH="ssh -o StrictHostKeyChecking=no -p $VM_SSH_PORT $VM_SSH_LOGIN@localhost"
 # SSH="-redir tcp:$VM_SSH_PORT::22" # deprecated - no virtio
 [ "$VM_SSH_PORT" -o "$VM_HTTP_PORT"          ] || NET=''
 [ "$VM_SSH_PORT" -a "$VM_SSH_LOGIN"          ] || SSH=''
 [ "`echo $VM_WAIT_SSH | grep -E '^[1-9]+$'`" ] || WAIT_SSH=30
+
+# prepare A/V
 AUDIO="-soundhw hda"
-VIDEO="$VGA -display sdl -no-frame"
+VIDEO_SDL="-display sdl -no-frame"
+VIDEO_VNC="-display vnc=:0"
+VIDEO="$VIDEO_SDL"
 MISC="-show-cursor"
 
+
 # load virtio kernel modules
-virtio_modules=`lsmod | grep virtio`
-[ "`echo $virtio_modules | grep virtio_net`"    == "" ] && su -c 'modprobe virtio-net'
-#[ "`echo $virtio_modules | grep virtio_blk`"     == "" ] && su -c 'modprobe virtio-blk'
-#[ "`echo $virtio_modules | grep virtio_scsi`"    == "" ] && su -c 'modprobe virtio-scsi'
-#[ "`echo $virtio_modules | grep virtio_serial`"  == "" ] && su -c 'modprobe virtio-serial'
-#[ "`echo $virtio_modules | grep virtio_balloon`" == "" ] && su -c 'modprobe virtio-balloon'
+if   (( $USE_VIRTIO ))
+then virtio_modules=`lsmod | grep virtio`
+     [ "`echo $virtio_modules | grep virtio_net`"    == "" ] && su -c 'modprobe virtio-net'
+     #[ "`echo $virtio_modules | grep virtio_blk`"     == "" ] && su -c 'modprobe virtio-blk'
+     #[ "`echo $virtio_modules | grep virtio_scsi`"    == "" ] && su -c 'modprobe virtio-scsi'
+     #[ "`echo $virtio_modules | grep virtio_serial`"  == "" ] && su -c 'modprobe virtio-serial'
+     #[ "`echo $virtio_modules | grep virtio_balloon`" == "" ] && su -c 'modprobe virtio-balloon'
+fi
 
 # concatenate command line and report
 echo "launching vm: '`echo "$IMG" | grep -E '^.+\.img$' | sed -e 's/^\(.*\/\)\?\(.*\).img$/\2/'`'"
-CMD="$QEMU $CPU $MEM $HD $CD $BOOT $NET $AUDIO $VIDEO $MISC"
+CMD="$QEMU $CPU $MEM $HD $CD $BOOT $VGA $NET $AUDIO $VIDEO $MISC"
 echo "$CMD"
 
 # launch VM and optionally login ssh
 [ "$FWD_SSH"  ] && echo "SSH port 22 forwarded to localhost:$VM_SSH_PORT"
 [ "$FWD_HTTP" ] && echo "HTTP port $VM_HTTP_PORT forwarded to localhost:$VM_HTTP_PORT"
-if [ "$SSH" -a "$WAIT_SSH" ]
+if   [ "$SSH" -a "$WAIT_SSH" ]
 then $CMD & waitSsh && $SSH
 else $CMD
 fi
