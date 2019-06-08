@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 read -r -d '' USAGE <<-'USAGE_END'
 USAGE:
 
@@ -14,24 +13,25 @@ USAGE:
 ENVIRONMENT:
 
     * VM_DIR       - (mandatory) full path to parent directory of VM subdirectories
-    * ARCH         - (optional) if == 'i386' launches qemu-system-$ARCH (default 'x86_64 -enable-kvm')
-    * MEM          - (optional) specifies VM memory size (default 1G)
-    * ISO          - (optional) .iso file for first optical disc - set as primary boot media (default none)
-    * IMG_B        - (optional) .img file for second hard disk (default none)
-    * VM_SSH_PORT  - (optional) external port to bind to internal port tcp/22
-    * VM_HTTP_PORT - (optional) external port to bind to internal port tcp/80
-    * VM_SSH_LOGIN - (optional) internal ssh user to login (if VM_SSH_PORT and VM_WAIT_SSH defined)
-    * VM_WAIT_SSH  - (optional) pause before ssh login (if VM_SSH_PORT and VM_SSH_LOGIN defined)
+    * ARCH         - (optional)  launches qemu-system-$ARCH (default: 'x86_64 + kvm + smp')
+    * MEM          - (optional)  specifies VM memory size (default: 1G)
+    * ISO          - (optional)  .iso file for first optical disc - set as primary boot media (default: none)
+    * IMG_B        - (optional)  .img file for second hard disk (default: none)
+    * SMP          - (optional)  SMP options as CSV: N_CORES,N_THREADS,N_SOCKETS (default: 2,1,1)
+    * VM_SSH_PORT  - (optional)  external port to bind to internal port tcp/22
+    * VM_HTTP_PORT - (optional)  external port to bind to internal port tcp/80
+    * VM_SSH_LOGIN - (optional)  internal ssh user to login (if VM_SSH_PORT and VM_WAIT_SSH defined)
+    * VM_WAIT_SSH  - (optional)  pause before ssh login (if VM_SSH_PORT and VM_SSH_LOGIN defined)
 
 
 EXAMPLES:
 
-    vm -h (or --help)      # present this message then quit
+    vm                     # present a alphabetical list of VMs and wait for choice
     vm /home/me/vm.img     # launch a VM by absolute or relative path to an image file
     vm img-dir             # launch $VM_DIR/img-dir/img-dir.img if it exists
+    vm -h (or --help)      # present this message then quit
     vm -l (or --list)      # present a alphabetical list of VMs then quit
     vm 1                   # launch a VM by it's current order number from `vm --list`
-    vm                     # present a alphabetical list of VMs and wait for choice
     ARCH=i386          vm  # launch 32-bit x86 VM
     MEM=1G             vm  # launch VM using 1GB of system memory
     ISO=/path/to/iso   vm  # boot from .iso file
@@ -41,36 +41,37 @@ EXAMPLES:
     VM_SSH_LOGIN=      vm  # forward ssh but do not login
     VM_WAIT_SSH=60     vm  # wait N seconds to login
 USAGE_END
-[ "$1" == "-l" -o "$1" == "--list"   ] && HAS_LIST_SWITCH=1
-[ "$1" == "-h" -o "$1" == "--help"   ] && HAS_HELP_SWITCH=1
-[ -z "$VM_DIR" -o "$HAS_HELP_SWITCH" ] && echo "$USAGE" && exit
+[ "$1" == "-l" -o "$1" == "--list" ] && readonly HAS_LIST_SWITCH=1
+[ "$1" == "-h" -o "$1" == "--help" ] && readonly HAS_HELP_SWITCH=1
+readonly VM_DIR_ERR_MSG="VM_DIR must be defined in the environment"
 
 
 function doesImgExist { [ -f "$1" -a "$(echo $1 | grep -E '^.+\.img$')" == "$1" ] ; }
 
 function isValidSelection
 {
-  [ "$choice" ] || choice=0
-  [ "$choice" -ge "0" -a $choice -le $N_IMG_DIRS ] && echo 1 || echo 0
+  [ "$selection" ] || selection=0
+  [ "$selection" -ge "0" -a $selection -le $N_IMG_DIRS ] && echo 1 || echo 0
 }
 
-function selectImage
+function selectImage # (img_n)
 {
+  local img_n=$1
   declare -a IMG_DIRS=($(for img in `ls -d $VM_DIR/*/*.img 2> /dev/null` ; do dir=`dirname $img` ; echo `basename $img` | grep "^`basename $dir`\.img$" > /dev/null && echo `basename $dir` ; done))
   N_IMG_DIRS=${#IMG_DIRS[@]}
-  [ "`echo $1 | grep -E '^[0-9]+$'`" ] && choice=$1 || choice=-1
+  selection=$([ "$(echo $img_n | grep -E '^[0-9]+$')" ] && echo $img_n || echo -1)
 
-  until (($(isValidSelection)))
+  until (( $(isValidSelection) ))
   do for img_dir_n in "${!IMG_DIRS[@]}"; do echo "$(($img_dir_n+1))) ${IMG_DIRS[$img_dir_n]}" ; done
-     if [ "$1" != "--list" ]
-     then echo -n "choice (1-$N_IMG_DIRS, 0=quit): " ; read choice ;
-          ((! $(isValidSelection)))  && echo "selection ($choice) out of range"
-     else choice=0
+     if   (( $HAS_LIST_SWITCH ))
+     then selection=0
+     else echo -n "choice (1-$N_IMG_DIRS, 0=quit): " ; read selection ;
+          (( ! $(isValidSelection) )) && echo "selection ($selection) out of range"
      fi
   done
-  (($N_IMG_DIRS)) || echo "no suitable images found in \$VM_DIR '$VM_DIR'"
-  (($choice    )) || exit
-  img_dir=${IMG_DIRS[$(($choice-1))]}
+  (( $N_IMG_DIRS )) || echo "no suitable images found in \$VM_DIR '$VM_DIR'"
+  (( $selection  )) || exit
+  img_dir=${IMG_DIRS[$(( $selection - 1 ))]}
 }
 
 function waitSsh
@@ -84,29 +85,41 @@ function waitSsh
 }
 
 
+## main entry ##
+
+(( $HAS_HELP_SWITCH )) && echo "$USAGE"          && exit
+[ -z "$VM_DIR" ]       && echo "$VM_DIR_ERR_MSG" && exit
+
+
 # determine which VM image to launch
-for img in "$1" "$VM_DIR/$1/$1.img" ; do doesImgExist $img && IMG=$img ; done ;
-[ "$IMG" ] || echo "IMG not found at '$img' or '$VM_DIR/$1/$1.img'"
+if   [ "$1" ]
+then if   [ "$(echo $1 | grep -E '^[0-9]+$')" ]
+     then IMG_N=img_n
+     else for img in "$1" "$VM_DIR/$1/$1.img" ; do doesImgExist $img && IMG=$img ; done ;
+          [ "$IMG" ] || echo "IMG not found at '$img' or '$VM_DIR/$1/$1.img'"
+     fi
+fi
 until doesImgExist $IMG
-do    selectImage $1
+do    selectImage $IMG_N
       IMG=$VM_DIR/$img_dir/$img_dir.img
       ! doesImgExist $IMG && clear && echo "HD image '$img' not found"
 done
 
 # prepare the environment
 # BOOT="-boot menu=on"
-N_CORES=2 N_THREADS=1 N_SOCKETS=1 SMP_REGEX="^[0-9],[0-9],[0-9]$"
-[ "$ARCH" != "i386"    ] && ARCH="x86_64 -enable-kvm"
-[ "$img_dir"           ] && NAME="-name $img_dir"
-[ "$IMG_B"             ] && HD="-drive file=$IMG_B,format=raw,cache=writeback"
-[[ $SMP =~ $SMP_REGEX ]] && N_CORES=${BASH_REMATCH[1]} N_THREADS=${BASH_REMATCH[2]} N_SOCKETS=${BASH_REMATCH[3]}
-[ -f "$ISO"            ] && CD="-cdrom $ISO" BOOT="-boot order=d"                 || CD="" BOOT=""
-[ "$MEM"               ] && MEM="-m $MEM"                                         || MEM="-m 1G"
-[ "$VGA"               ] && VGA="-vga $VGA"                                       || VGA="-vga std" # cirrus, qxl, std, vmware
-[ "$VM_SSH_PORT"       ] && FWD_SSH=",hostfwd=tcp::$VM_SSH_PORT-:22"              || FWD_SSH=''
-[ "$VM_HTTP_PORT"      ] && FWD_HTTP=",hostfwd=tcp::$VM_HTTP_PORT-:$VM_HTTP_PORT" || FWD_HTTP=''
+SMP_REGEX="^[0-9],[0-9],[0-9]$" N_CORES=2 N_THREADS=1 N_SOCKETS=1
+[[ "$SMP" =~ $SMP_REGEX ]] && N_CORES=${BASH_REMATCH[1]} N_THREADS=${BASH_REMATCH[2]} N_SOCKETS=${BASH_REMATCH[3]}
+[[ -z "$ARCH"           ]] && ARCH="x86_64"
+[[ "$ARCH" == 'x86_64'  ]] && CPU="-cpu host -smp cores=$N_CORES,threads=$N_THREADS,sockets=$N_SOCKETS"
+[[ "$ARCH" == 'x86_64'  ]] && ARCH="x86_64 -enable-kvm"
+[[ "$img_dir"           ]] && NAME="-name $img_dir"
+[[ "$IMG_B"             ]] && HD="-drive file=$IMG_B,format=raw,cache=writeback"
+[[ -f "$ISO"            ]] && CD="-cdrom $ISO" BOOT="-boot order=d"                 || CD="" BOOT=""
+[[ "$MEM"               ]] && MEM="-m $MEM"                                         || MEM="-m 1G"
+[[ "$VGA"               ]] && VGA="-vga $VGA"                                       || VGA="-vga std" # cirrus, qxl, std, vmware
+[[ "$VM_SSH_PORT"       ]] && FWD_SSH=",hostfwd=tcp::$VM_SSH_PORT-:22"              || FWD_SSH=''
+[[ "$VM_HTTP_PORT"      ]] && FWD_HTTP=",hostfwd=tcp::$VM_HTTP_PORT-:$VM_HTTP_PORT" || FWD_HTTP=''
 QEMU="qemu-system-$ARCH $NAME"
-CPU="-cpu host -smp cores=$N_CORES,threads=$N_THREADS,sockets=$N_SOCKETS"
 HD="-drive file=$IMG,format=raw,cache=writeback $HD"
 
 # prepare networking
@@ -137,7 +150,8 @@ SSH="ssh -o StrictHostKeyChecking=no -p $VM_SSH_PORT $VM_SSH_LOGIN@localhost"
 
 # prepare A/V
 AUDIO="-soundhw hda"
-VIDEO_SDL="-display sdl -no-frame"
+#VIDEO_SDL="-display sdl -no-frame"
+VIDEO_SDL="-display sdl"
 VIDEO_VNC="-display vnc=:0"
 VIDEO="$VIDEO_SDL"
 MISC="-show-cursor"
