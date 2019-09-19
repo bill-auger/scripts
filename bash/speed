@@ -1,28 +1,51 @@
 #!/bin/bash
 
 # IF='eth0'
-IF=`ls /sys/class/net/ | grep -E '^wl'`
-IVL=3
-KB_SCALE=$(($IVL*125)) # bytes => kbits
-UP_STATS_FILE=/sys/class/net/$IF/statistics/tx_bytes
-DOWN_STATS_FILE=/sys/class/net/$IF/statistics/rx_bytes
+readonly IF=`ls /sys/class/net/ | grep -E '^wl'`
+readonly IVL=3
+readonly SPEECH_RATE='--rate -50' # -100<0>100
+readonly KB_SCALE=$(( $IVL * 125 )) # bytes => kbits
+readonly UP_STATS_FILE=/sys/class/net/$IF/statistics/tx_bytes
+readonly DOWN_STATS_FILE=/sys/class/net/$IF/statistics/rx_bytes
 if   [ "$1" == "--up" ]
 then DIR="up"   ; STATS_FILE=$UP_STATS_FILE
 else DIR="down" ; STATS_FILE=$DOWN_STATS_FILE
 fi
-
+if   [ "$2" == "--once" ]
+then N=1 ; n=0
+else N=0 ; n=0
+fi
 
 total_bytes=`cat $STATS_FILE`
 prev_bytes=$total_bytes
 
-while ((1))
+while (( 1 ))
 do    total_bytes=`cat $STATS_FILE`
-      bytes=$(($total_bytes-$prev_bytes))
-      kbps=$(($bytes/$KB_SCALE))
+      bytes=$(( $total_bytes-$prev_bytes ))
+      kbps=$((  $bytes/$KB_SCALE         ))
+      display_prev_bytes=$prev_bytes
       prev_bytes=$total_bytes
 
-      [ $(($kbps)) -gt $((99)) ] && spd-say "$(($kbps/100*100)) k" || spd-say "$kbps k"
-      clear ; echo "$((bytes/$IVL)) bytes/sec $DIR" ;
-              echo "$((kbps*1000 )) bits/sec  $DIR" ;
+      rate_msg=$( ( [ $(( $kbps )) -gt $(( 999 )) ] && echo "$(( $kbps/1000    )) mibulz" ) || \
+                  ( [ $(( $kbps )) -gt $((  99 )) ] && echo "$(( $kbps/100*100 )) kibulz" ) || \
+                  ( [ $(( $kbps )) -gt $((   9 )) ] && echo "$(( $kbps/10*10   )) kibulz" ) || \
+                                                       echo "$kbps kibulz"                     )
+      clear ; echo -e "$IF $DIR sample[$n]:\n  $rate_msg" ; echo "details:" ;
+              echo "  $total_bytes total_bytes"
+              echo "- $display_prev_bytes prev_bytes"
+              echo "---------------------------"
+              echo "  $bytes bytes per $IVL secs"
+              echo "  $(( $bytes / $IVL     )) bytes/sec" ;
+              echo "  $(( $bytes / $IVL / 8 )) bits/sec" ;
+              echo "  $(( $kbps             )) kibbles/sec" ;
       sleep $IVL
+
+# (( $N < 1 )) && echo t || echo f
+# (( $n < $N )) && echo t || echo f
+# (( $N > 0 )) && (( $n >= $N )) && echo t || echo f
+#       [[ $(( $N <= 1 )) || $(( $n < $N )) ]] && n=$(( $n+1 )) && sleep $IVL || break
+
+      speech_msg=$rate_msg
+      (( $n > 0 )) && spd-say $SPEECH_RATE "$speech_msg" ; n=$(( $n+1 )) ;
+      (( $N > 0 )) && (( $n >= $N )) && break
 done
