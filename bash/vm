@@ -41,46 +41,63 @@ EXAMPLES:
     VM_SSH_LOGIN=      vm  # forward ssh but do not login
     VM_WAIT_SSH=60     vm  # wait N seconds to login
 USAGE_END
-[ "$1" == "-l" -o "$1" == "--list" ] && readonly HAS_LIST_SWITCH=1
-[ "$1" == "-h" -o "$1" == "--help" ] && readonly HAS_HELP_SWITCH=1
+readonly HAS_LIST_SWITCH=$([ "$1" == "-l" -o "$1" == "--list" ] && echo 1 || echo 0)
+readonly HAS_HELP_SWITCH=$([ "$1" == "-h" -o "$1" == "--help" ] && echo 1 || echo 0)
+readonly IMG_NAME_OR_N=$1                                          # pending validation
+readonly IMG_FULL_PATH="$VM_DIR/$IMG_NAME_OR_N/$IMG_NAME_OR_N.img" # pending validation
 readonly VM_DIR_ERR_MSG="VM_DIR must be defined in the environment"
+declare -r -a IMG_DIRS=( $(
+  for img_full_path in $(ls -d $VM_DIR/*/*.img 2> /dev/null)
+  do  img=$(basename $img_full_path)
+      dir=$(basename $(dirname $img_full_path))
+      grep "^$dir\.img$" <<<$img > /dev/null && echo $dir
+  done
+) )
+readonly N_IMG_DIRS=${#IMG_DIRS[@]}
+
+Selection= # deferred
+ImgDir=    # deferred
 
 
 function doesImgExist { [ -f "$1" -a "$(echo $1 | grep -E '^.+\.img$')" == "$1" ] ; }
 
-function isValidSelection
+function isValidSelection # (img_n)
 {
-  [ "$selection" ] || selection=0
-  [ "$selection" -ge "0" -a $selection -le $N_IMG_DIRS ] && echo 1 || echo 0
+  local img_n=$(sed -E 's|^([0-9]+)$|\1|' <<<$1) ; [ "$img_n" ] || img_n=-1 ;
+
+  [[ "$img_n" -ge "0" ]] && [[ "$img_n" -le "$N_IMG_DIRS" ]]
+}
+
+function isVmSelection # (img_n)
+{
+  isValidSelection $img_n && [[ "$img_n" -ne "0" ]]
 }
 
 function selectImage # (img_n)
 {
   local img_n=$1
-  declare -a IMG_DIRS=($(for img in `ls -d $VM_DIR/*/*.img 2> /dev/null` ; do dir=`dirname $img` ; echo `basename $img` | grep "^`basename $dir`\.img$" > /dev/null && echo `basename $dir` ; done))
-  N_IMG_DIRS=${#IMG_DIRS[@]}
-  selection=$([ "$(echo $img_n | grep -E '^[0-9]+$')" ] && echo $img_n || echo -1)
+  Selection=$(isValidSelection $img_n && echo $img_n || echo -1)
 
-  until (( $(isValidSelection) ))
-  do for img_dir_n in "${!IMG_DIRS[@]}"; do echo "$(($img_dir_n+1))) ${IMG_DIRS[$img_dir_n]}" ; done
-     if   (( $HAS_LIST_SWITCH ))
-     then selection=0
-     else echo -n "choice (1-$N_IMG_DIRS, 0=quit): " ; read selection ;
-          (( ! $(isValidSelection) )) && echo "selection ($selection) out of range"
+  until isValidSelection $Selection
+  do    for img_dir_n in "${!IMG_DIRS[@]}"; do echo "$(($img_dir_n+1))) ${IMG_DIRS[$img_dir_n]}" ; done ;
+        if   (( $HAS_LIST_SWITCH ))
+        then Selection=0
+        else echo -n "choice (1-$N_IMG_DIRS, 0=quit): " ; read Selection ;
+             isValidSelection $Selection || echo "Selection ($Selection) out of range"
      fi
   done
+
   (( $N_IMG_DIRS )) || echo "no suitable images found in \$VM_DIR '$VM_DIR'"
-  (( $selection  )) || exit
-  img_dir=${IMG_DIRS[$(( $selection - 1 ))]}
+  ImgDir=${IMG_DIRS[$(( $Selection - 1 ))]}
 }
 
 function waitSsh
 {
   ssh-keygen -f "~/.ssh/known_hosts" -R [localhost]:$VM_SSH_PORT
   while (($WAIT_SSH > 0))
-  do WAIT_SSH=($WAIT_SSH-1)
-     clear ; echo "logging in ssh in $(($WAIT_SSH+1)) seconds" ;
-     sleep 1
+  do    WAIT_SSH=($WAIT_SSH-1)
+        clear ; echo "logging in ssh in $(($WAIT_SSH+1)) seconds" ;
+        sleep 1
   done
 }
 
@@ -90,18 +107,15 @@ function waitSsh
 (( $HAS_HELP_SWITCH )) && echo "$USAGE"          && exit
 [ -z "$VM_DIR" ]       && echo "$VM_DIR_ERR_MSG" && exit
 
-
 # determine which VM image to launch
-if   [ "$1" ]
-then if   [ "$(echo $1 | grep -E '^[0-9]+$')" ]
-     then IMG_N=img_n
-     else for img in "$1" "$VM_DIR/$1/$1.img" ; do doesImgExist $img && IMG=$img ; done ;
-          [ "$IMG" ] || echo "IMG not found at '$img' or '$VM_DIR/$1/$1.img'"
-     fi
+if   [ "$IMG_NAME_OR_N" ] && ! isValidSelection $IMG_NAME_OR_N
+then for img in "$IMG_NAME_OR_N" "$IMG_FULL_PATH" ; do doesImgExist $img && IMG=$img ; done ;
+     [ "$IMG" ] || echo "IMG not found at '$img' or '$IMG_FULL_PATH'"
 fi
 until doesImgExist $IMG
-do    selectImage $IMG_N
-      IMG=$VM_DIR/$img_dir/$img_dir.img
+do    selectImage $IMG_NAME_OR_N
+
+      IMG=$VM_DIR/$ImgDir/$ImgDir.img
       ! doesImgExist $IMG && clear && echo "HD image '$img' not found"
 done
 
@@ -112,7 +126,7 @@ SMP_REGEX="^[0-9],[0-9],[0-9]$" N_CORES=2 N_THREADS=1 N_SOCKETS=1
 [[ -z "$ARCH"           ]] && ARCH="x86_64"
 [[ "$ARCH" == 'x86_64'  ]] && CPU="-cpu host -smp cores=$N_CORES,threads=$N_THREADS,sockets=$N_SOCKETS"
 [[ "$ARCH" == 'x86_64'  ]] && ARCH="x86_64 -enable-kvm"
-[[ "$img_dir"           ]] && NAME="-name $img_dir"
+[[ "$ImgDir"            ]] && NAME="-name $ImgDir"
 [[ "$IMG_B"             ]] && HD="-drive file=$IMG_B,format=raw,cache=writeback"
 [[ -f "$ISO"            ]] && CD="-cdrom $ISO" BOOT="-boot order=d"                 || CD="" BOOT=""
 [[ "$MEM"               ]] && MEM="-m $MEM"                                         || MEM="-m 1G"
@@ -143,7 +157,7 @@ fi
 
 # prepare SSH
 SSH="ssh -o StrictHostKeyChecking=no -p $VM_SSH_PORT $VM_SSH_LOGIN@localhost"
-# SSH="-redir tcp:$VM_SSH_PORT::22" # deprecated - no virtio
+# SSH="-redir tcp:$VM_SSH_PORT::22" # no virtio - deprecated
 [ "$VM_SSH_PORT" -o "$VM_HTTP_PORT"          ] || NET=''
 [ "$VM_SSH_PORT" -a "$VM_SSH_LOGIN"          ] || SSH=''
 [ "`echo $VM_WAIT_SSH | grep -E '^[1-9]+$'`" ] || WAIT_SSH=30
