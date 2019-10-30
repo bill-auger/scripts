@@ -45,7 +45,8 @@ readonly HAS_LIST_SWITCH=$([ "$1" == "-l" -o "$1" == "--list" ] && echo 1 || ech
 readonly HAS_HELP_SWITCH=$([ "$1" == "-h" -o "$1" == "--help" ] && echo 1 || echo 0)
 readonly IMG_NAME_OR_N=$1                                          # pending validation
 readonly IMG_FULL_PATH="$VM_DIR/$IMG_NAME_OR_N/$IMG_NAME_OR_N.img" # pending validation
-readonly VM_DIR_ERR_MSG="VM_DIR must be defined in the environment"
+readonly VM_DIR_NULL_ERR_MSG="VM_DIR must be defined in the environment"
+readonly VM_DIR_MISSING_ERR_MSG="VM_DIR not found: '$VM_DIR'"
 declare -r -a IMG_DIRS=( $(
   for img_full_path in $(ls -d $VM_DIR/*/*.img 2> /dev/null)
   do  img=$(basename $img_full_path)
@@ -59,11 +60,15 @@ Selection= # deferred
 ImgDir=    # deferred
 
 
-function doesImgExist { [ -f "$1" -a "$(echo $1 | grep -E '^.+\.img$')" == "$1" ] ; }
+function doesImgExist { [ -f "$1" -a "$(grep -E '^.+\.img$' <<<$1)" == "$1" ] ; }
+
+function doesIsoExist { [ -f "$1" -a "$(grep -E '^.+\.iso$' <<<$1)" == "$1" ] ; }
+
+function isInteger { [[ "$1" =~ ^([0-9]+)$ ]] ; }
 
 function isValidSelection # (img_n)
 {
-  local img_n=$(sed -E 's|^([0-9]+)$|\1|' <<<$1) ; [ "$img_n" ] || img_n=-1 ;
+  local img_n=$(isInteger $1 && echo $1 || echo '-1')
 
   [[ "$img_n" -ge "0" ]] && [[ "$img_n" -le "$N_IMG_DIRS" ]]
 }
@@ -104,16 +109,23 @@ function waitSsh
 
 ## main entry ##
 
-(( $HAS_HELP_SWITCH )) && echo "$USAGE"          && exit
-[ -z "$VM_DIR" ]       && echo "$VM_DIR_ERR_MSG" && exit
+(( $HAS_HELP_SWITCH )) && echo "$USAGE"                  && exit
+[   -z "$VM_DIR" ]     && echo "$VM_DIR_NULL_ERR_MSG"    && exit
+[ ! -d "$VM_DIR" ]     && echo "$VM_DIR_MISSING_ERR_MSG" && exit
 
 # determine which VM image to launch
-if   [ "$IMG_NAME_OR_N" ] && ! isValidSelection $IMG_NAME_OR_N
-then for img in "$IMG_NAME_OR_N" "$IMG_FULL_PATH" ; do doesImgExist $img && IMG=$img ; done ;
-     [ "$IMG" ] || echo "IMG not found at '$img' or '$IMG_FULL_PATH'"
+if   [ "$IMG_NAME_OR_N" ]
+then if ! isInteger $IMG_NAME_OR_N
+     then # find image by img_n
+          for img in "$IMG_NAME_OR_N" "$IMG_FULL_PATH" ; do doesImgExist $img && IMG=$img ; done ;
+          [ "$IMG" ]                      || echo "IMG not found at '$IMG_NAME_OR_N' or '$IMG_FULL_PATH'"
+     else isValidSelection $IMG_NAME_OR_N || echo "Selection ($IMG_NAME_OR_N) out of range"
+     fi
 fi
+[ "$ISO" ] && ! doesIsoExist "$ISO" && echo "ISO not found at '$ISO'"
 until doesImgExist $IMG
-do    selectImage $IMG_NAME_OR_N
+do    # find image by img_n
+      selectImage $IMG_NAME_OR_N
 
       IMG=$VM_DIR/$ImgDir/$ImgDir.img
       ! doesImgExist $IMG && clear && echo "HD image '$img' not found"
