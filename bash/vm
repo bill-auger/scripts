@@ -55,10 +55,14 @@ declare -r -a IMG_DIRS=( $(
   done
 ) )
 readonly N_IMG_DIRS=${#IMG_DIRS[@]}
+readonly SMP_REGEX="^[0-9],[0-9],[0-9]$"
+readonly USE_VIRTIO=0
+readonly USE_VIRTFS=0
+readonly USE_VIRTSMB=0
 
-Selection= # deferred
-ImgDir=    # deferred
-
+Selection=     # deferred
+ImgDir=        # deferred
+OverridesFile= # deferred
 
 function doesImgExist { [ -f "$1" -a "$(grep -E '^.+\.img$' <<<$1)" == "$1" ] ; }
 
@@ -94,6 +98,7 @@ function selectImage # (img_n)
 
   (( $N_IMG_DIRS )) || echo "no suitable images found in \$VM_DIR '$VM_DIR'"
   ImgDir=${IMG_DIRS[$(( $Selection - 1 ))]}
+  OverridesFile=$VM_DIR/$ImgDir/vm-config
 }
 
 function waitSsh
@@ -132,9 +137,9 @@ do    # find image by img_n
 done
 
 # prepare the environment
-# BOOT="-boot menu=on"
-SMP_REGEX="^[0-9],[0-9],[0-9]$" N_CORES=2 N_THREADS=1 N_SOCKETS=1
-[[ "$SMP" =~ $SMP_REGEX ]] && N_CORES=${BASH_REMATCH[1]} N_THREADS=${BASH_REMATCH[2]} N_SOCKETS=${BASH_REMATCH[3]}
+[[ -f $OverridesFile    ]] && source $OverridesFile
+[[ "$SMP" =~ $SMP_REGEX ]] && N_CORES=${BASH_REMATCH[1]} N_THREADS=${BASH_REMATCH[2]} N_SOCKETS=${BASH_REMATCH[3]} || \
+                              N_CORES=2                  N_THREADS=1                  N_SOCKETS=1
 [[ -z "$ARCH"           ]] && ARCH="x86_64"
 [[ "$ARCH" == 'x86_64'  ]] && CPU="-cpu host -smp cores=$N_CORES,threads=$N_THREADS,sockets=$N_SOCKETS"
 [[ "$ARCH" == 'x86_64'  ]] && ARCH="x86_64 -enable-kvm"
@@ -147,11 +152,9 @@ SMP_REGEX="^[0-9],[0-9],[0-9]$" N_CORES=2 N_THREADS=1 N_SOCKETS=1
 [[ "$VM_HTTP_PORT"      ]] && FWD_HTTP=",hostfwd=tcp::$VM_HTTP_PORT-:$VM_HTTP_PORT" || FWD_HTTP=''
 QEMU="qemu-system-$ARCH $NAME"
 HD="-drive file=$IMG,format=raw,cache=writeback $HD"
+# BOOT="-boot menu=on"
 
 # prepare networking
-readonly USE_VIRTIO=0
-readonly USE_VIRTFS=0
-readonly USE_VIRTSMB=0
 SHARED_DIR_DEFAULT=$HOME/.config/vm-shared
 [[ ! -d "$SHARED_DIR" ]] && [[ -d "$SHARED_DIR_DEFAULT" ]] && SHARED_DIR=$SHARED_DIR_DEFAULT
 NET_VIRTIO="-netdev user,id=vmnic$FWD_SSH$FWD_HTTP -device virtio-net,netdev=vmnic"
