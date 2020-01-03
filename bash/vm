@@ -3,11 +3,14 @@
 read -r -d '' USAGE <<-'USAGE_END'
 USAGE:
 
-        vm [ -h | --help | <img> | <img-dir> | -l | --list | <n> ]
+        vm [ -h | --help ]
+        vm [ -l | --list ]
+        vm [ <img> | <img-dir> | <n> ] [ <qemu-args> ]
 
     where: <img> is the path to an .img file
     where: <img-dir> is one of `ls -d $VM_DIR/*/`
     where: <n> is one of the numbered selections of `vm --list`
+    where: <qemu-args> are passed to qemu
 
 
 ENVIRONMENT:
@@ -18,10 +21,10 @@ ENVIRONMENT:
     * ISO          - (optional)  .iso file for first optical disc - set as primary boot media (default: none)
     * IMG_B        - (optional)  .img file for second hard disk (default: none)
     * SMP          - (optional)  SMP options as CSV: N_CORES,N_THREADS,N_SOCKETS (default: 2,1,1)
-    * VM_SSH_PORT  - (optional)  external port to bind to internal port tcp/22
-    * VM_HTTP_PORT - (optional)  external port to bind to internal port tcp/80
-    * VM_SSH_LOGIN - (optional)  internal ssh user to login (if VM_SSH_PORT and VM_WAIT_SSH defined)
-    * VM_WAIT_SSH  - (optional)  pause before ssh login (if VM_SSH_PORT and VM_SSH_LOGIN defined)
+    * VM_SSH_PORT  - (optional)  host port to bind to guest port tcp/22
+    * VM_HTTP_PORT - (optional)  host port to bind to guest port tcp/80
+    * VM_SSH_LOGIN - (optional)  guest SSH user to login as (if VM_SSH_PORT defined)
+    * VM_WAIT_SSH  - (optional)  pause before SSH login (if VM_SSH_PORT and VM_SSH_LOGIN defined)
 
 
 EXAMPLES:
@@ -45,6 +48,7 @@ readonly HAS_LIST_SWITCH=$([ "$1" == "-l" -o "$1" == "--list" ] && echo 1 || ech
 readonly HAS_HELP_SWITCH=$([ "$1" == "-h" -o "$1" == "--help" ] && echo 1 || echo 0)
 readonly IMG_NAME_OR_N=$1                                          # pending validation
 readonly IMG_FULL_PATH="$VM_DIR/$IMG_NAME_OR_N/$IMG_NAME_OR_N.img" # pending validation
+readonly QEMU_ARGS=$(args="$*" ; echo $args | grep ' -' > /dev/null && echo "-${args#* -}" )
 readonly VM_DIR_NULL_ERR_MSG="VM_DIR must be defined in the environment"
 readonly VM_DIR_MISSING_ERR_MSG="VM_DIR not found: '$VM_DIR'"
 readonly ISOS_DIR_NAME="isos"
@@ -190,8 +194,10 @@ done
 # determine which ISO to boot
 if   doesIsoExist "$ISO"
 then Iso="$ISO"
-elif [[ "$ImgDir" == "$SCRATCH_IMG_NAME" ]]
-then until doesIsoExist "$Iso" ; do selectIso ; clear ; done ;
+else [[ "$ISO" ]] && echo "\$ISO not found at '$ISO'"
+     if   [[ "$ImgDir" == "$SCRATCH_IMG_NAME" ]]
+     then until doesIsoExist "$Iso" ; do selectIso ; clear ; done ;
+     fi
 fi
 
 echo -e "Selected:\n\tIso: $Iso\n\tImg: $Img"
@@ -259,7 +265,7 @@ fi
 
 # concatenate command line and report
 echo "launching vm: '`echo "$Img" | grep -E '^.+\.img$' | sed -e 's/^\(.*\/\)\?\(.*\).img$/\2/'`'"
-CMD="$QEMU $CPU $MEM $HD $CD $BOOT $VGA $NET $AUDIO $VIDEO $MISC"
+CMD="$QEMU $CPU $MEM $HD $CD $BOOT $VGA $NET $AUDIO $VIDEO $MISC $QEMU_ARGS"
 echo "$CMD"
 
 # launch VM and optionally login ssh
