@@ -227,22 +227,14 @@ SHARED_DIR_DEFAULT=$HOME/.config/vm-shared
 NET_VIRTIO="-netdev user,id=vmnic$FWD_SSH$FWD_HTTP -device virtio-net,netdev=vmnic"
 NET_VIRTSMB="-net user,smb=\"$SHARED_DIR\" -net nic,model=virtio"
 NET_VIRTFS="-virtfs local,path=\"$SHARED_DIR\",mount_tag=host0,security_model=passthrough,id=host0"
-#     (( $USE_VIRTIO )) && NET="$NET_VIRTIO" || NET=''
-if   ((   $USE_VIRTIO ))
-then NET="$NET_VIRTIO"
-elif ((   $USE_VIRTSMB ))
-then NET="$NET_VIRTSMB"
-elif ((   $USE_VIRTFS ))
-then NET="$NET_VIRTFS" # guest fstab entry: host0 /a-mountpoint 9p trans=virtio,version=9p2000.L 0 0
-else NET=''
-fi
-
-# prepare SSH
-SSH="ssh -o StrictHostKeyChecking=no -p $VM_SSH_PORT $VM_SSH_LOGIN@localhost"
 # SSH="-redir tcp:$VM_SSH_PORT::22" # no virtio - deprecated
-[[ "$VM_SSH_PORT" ]] || [[ "$VM_HTTP_PORT"    ]] || NET=''
-[[ "$VM_SSH_PORT" ]] && [[ "$VM_SSH_LOGIN"    ]] || SSH=''
-[[ "`echo $VM_WAIT_SSH | grep -E '^[1-9]+$'`" ]] || WAIT_SSH=30
+if   [[ "$VM_SSH_PORT" ]] || [[ "$VM_HTTP_PORT"    ]]
+then [[ "$VM_SSH_PORT" ]] && [[ "$VM_SSH_LOGIN"    ]] && SSH="ssh -o StrictHostKeyChecking=no -p $VM_SSH_PORT $VM_SSH_LOGIN@localhost"
+     [[ "`echo $VM_WAIT_SSH | grep -E '^[1-9]+$'`" ]] || WAIT_SSH=30
+     NET=$( ( (( $USE_VIRTIO  )) && echo "$NET_VIRTIO" )
+            ( (( $USE_VIRTSMB )) && echo "$NET_VIRTSMB")
+            ( (( $USE_VIRTFS  )) && echo "$NET_VIRTFS" ) ) # guest fstab entry: host0 /a-mountpoint 9p trans=virtio,version=9p2000.L 0 0
+fi
 
 # prepare A/V
 AUDIO="-soundhw hda"
@@ -264,13 +256,15 @@ then virtio_modules=`lsmod | grep virtio`
 fi
 
 # concatenate command line and report
+[[ "$FWD_SSH"  ]] && ( [[ "$NET" ]] && echo "SSH port 22 forwarded to localhost:$VM_SSH_PORT" || \
+                                       echo "no USE_VIRT* enabled - SSH will not be forwarded"   )
+[[ "$FWD_HTTP" ]] && ( [[ "$NET" ]] && echo "HTTP port $VM_HTTP_PORT forwarded to localhost:$VM_HTTP_PORT" || \
+                                       echo "no USE_VIRT* enabled - HTTP will not be forwarded"               )
 echo "launching vm: '`echo "$Img" | grep -E '^.+\.img$' | sed -e 's/^\(.*\/\)\?\(.*\).img$/\2/'`'"
 CMD="$QEMU $CPU $MEM $HD $CD $BOOT $VGA $NET $AUDIO $VIDEO $MISC $QEMU_ARGS"
 echo "$CMD"
 
 # launch VM and optionally login ssh
-[[ "$FWD_SSH"  ]] && echo "SSH port 22 forwarded to localhost:$VM_SSH_PORT"
-[[ "$FWD_HTTP" ]] && echo "HTTP port $VM_HTTP_PORT forwarded to localhost:$VM_HTTP_PORT"
 if   [[ "$SSH" ]] && [[ "$WAIT_SSH" ]]
 then $CMD & waitSsh && $SSH
 else $CMD
