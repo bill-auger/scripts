@@ -79,6 +79,8 @@ declare -r -a IMG_DIRS=( $(
 readonly N_IMGS=${#IMG_DIRS[@]}
 readonly N_ISOS=${#ISOS[@]}
 readonly SMP_REGEX="^[0-9],[0-9],[0-9]$"
+readonly DEF_MEM='2G'
+readonly DEF_VGA='std' # cirrus, qxl, std, vmware
 readonly USE_VIRTIO=0
 readonly USE_VIRTFS=0
 readonly USE_VIRTSMB=0
@@ -213,8 +215,8 @@ echo -e "Selected:\n\tIso: $Iso\n\tImg: $Img"
 [[ "$ImgDir"            ]] && NAME="-name $ImgDir"
 [[ "$IMG_B"             ]] && HD="-drive file=$IMG_B,format=raw,cache=writeback"
 doesIsoExist "$Iso"        && CD="-cdrom $Iso" BOOT="-boot order=d"                 || CD="" BOOT=""
-[[ "$MEM"               ]] && MEM="-m $MEM"                                         || MEM="-m 1G"
-[[ "$VGA"               ]] && VGA="-vga $VGA"                                       || VGA="-vga std" # cirrus, qxl, std, vmware
+[[ "$MEM"               ]] && MEM="-m $MEM"                                         || MEM="-m $DEF_MEM"
+[[ "$VGA"               ]] && VGA="-vga $VGA"                                       || VGA="-vga $DEF_VGA"
 [[ "$VM_SSH_PORT"       ]] && FWD_SSH=",hostfwd=tcp::$VM_SSH_PORT-:22"              || FWD_SSH=''
 [[ "$VM_HTTP_PORT"      ]] && FWD_HTTP=",hostfwd=tcp::$VM_HTTP_PORT-:$VM_HTTP_PORT" || FWD_HTTP=''
 QEMU="qemu-system-$ARCH $NAME"
@@ -231,9 +233,9 @@ NET_VIRTFS="-virtfs local,path=\"$SHARED_DIR\",mount_tag=host0,security_model=pa
 if   [[ "$VM_SSH_PORT" ]] || [[ "$VM_HTTP_PORT"    ]]
 then [[ "$VM_SSH_PORT" ]] && [[ "$VM_SSH_LOGIN"    ]] && SSH="ssh -o StrictHostKeyChecking=no -p $VM_SSH_PORT $VM_SSH_LOGIN@localhost"
      [[ "`echo $VM_WAIT_SSH | grep -E '^[1-9]+$'`" ]] || WAIT_SSH=30
-     NET=$( ( (( $USE_VIRTIO  )) && echo "$NET_VIRTIO" )
-            ( (( $USE_VIRTSMB )) && echo "$NET_VIRTSMB")
-            ( (( $USE_VIRTFS  )) && echo "$NET_VIRTFS" ) ) # guest fstab entry: host0 /a-mountpoint 9p trans=virtio,version=9p2000.L 0 0
+     NET=$( ( (( $USE_VIRTIO  )) && echo "$NET_VIRTIO"  )
+            ( (( $USE_VIRTSMB )) && echo "$NET_VIRTSMB" )
+            ( (( $USE_VIRTFS  )) && echo "$NET_VIRTFS"  ) ) # guest fstab entry: host0 /a-mountpoint 9p trans=virtio,version=9p2000.L 0 0
 fi
 
 # prepare A/V
