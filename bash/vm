@@ -49,6 +49,7 @@ readonly HAS_HELP_SWITCH=$([ "$1" == "-h" -o "$1" == "--help" ] && echo 1 || ech
 readonly IMG_NAME_OR_N=$1                                          # pending validation
 readonly IMG_FULL_PATH="$VM_DIR/$IMG_NAME_OR_N/$IMG_NAME_OR_N.img" # pending validation
 readonly QEMU_ARGS=$(args="$*" ; echo $args | grep ' -' > /dev/null && echo "-${args#* -}" )
+readonly IS_HEADLESS=$( [[ ! -f /usr/lib/qemu/ui-sdl.so ]] && echo 1 || echo 0 )
 readonly VM_DIR_NULL_ERR_MSG="VM_DIR must be defined in the environment"
 readonly VM_DIR_MISSING_ERR_MSG="VM_DIR not found: '$VM_DIR'"
 readonly ISOS_DIR_NAME="isos"
@@ -243,7 +244,7 @@ AUDIO="-soundhw hda"
 #VIDEO_SDL="-display sdl -no-frame"
 VIDEO_SDL="-display sdl"
 VIDEO_VNC="-display vnc=:0"
-VIDEO="$VIDEO_SDL"
+(( ${IS_HEADLESS} )) && VIDEO="${VIDEO_VNC}" || VIDEO="${VIDEO_SDL}"
 MISC="-show-cursor"
 
 
