@@ -57,25 +57,23 @@ readonly SCRATCH_IMG_NAME="scratch"
 readonly ISOS_DIR=$VM_DIR/$ISOS_DIR_NAME
 readonly SCRATCH_IMG_DIR=$VM_DIR/$SCRATCH_IMG_NAME
 readonly SCRATCH_IMG=$SCRATCH_IMG_DIR/$SCRATCH_IMG_NAME.img
-readonly HAS_SCRATCH_IMG=$(
-  [[ -d "$SCRATCH_IMG_DIR/" ]] || mkdir -p "$SCRATCH_IMG_DIR" 1>&2
-  [[ -f "$SCRATCH_IMG"      ]] || qemu-img create "$SCRATCH_IMG" 9G 1>&2 && echo 1 || echo 0
-)
+declare -r -a IMG_DIRS=( $(
+  [[ -d "$SCRATCH_IMG_DIR/" ]] || mkdir -p "$SCRATCH_IMG_DIR"       1>&2
+  [[ -f $SCRATCH_IMG        ]] || qemu-img create "$SCRATCH_IMG" 9G 1>&2
+  [[ -f $SCRATCH_IMG        ]] && [[ "$IMG_B" != "$SCRATCH_IMG" ]] && echo $SCRATCH_IMG_NAME
+
+  for img_full_path in $(ls -d $VM_DIR/*/*.img 2> /dev/null)
+  do  dir=$(basename $(dirname $img_full_path))
+      img=$(basename           $img_full_path)
+      [[ "$dir" != "$SCRATCH_IMG_NAME" ]] && [[ "$img_full_path" != "$IMG_B" ]] || continue
+
+      grep "^$dir\.img$" <<<$img > /dev/null && echo $dir
+  done
+) )
 declare -r -a ISOS=( $(
   [[ -d "$ISOS_DIR/" ]] || mkdir -p "$ISOS_DIR"
 
   find $ISOS_DIR/ -name *.iso 2> /dev/null
-) )
-declare -r -a IMG_DIRS=( $(
-  (( $HAS_SCRATCH_IMG )) && echo $SCRATCH_IMG_NAME
-
-  for img_full_path in $(ls -d $VM_DIR/*/*.img 2> /dev/null)
-  do  dir=$(basename $(dirname $img_full_path))
-      img=$(basename $img_full_path)
-      [[ "$dir" == "$SCRATCH_IMG_NAME" ]] && continue
-
-      grep "^$dir\.img$" <<<$img > /dev/null && echo $dir
-  done
 ) )
 readonly N_IMGS=${#IMG_DIRS[@]}
 readonly N_ISOS=${#ISOS[@]}
@@ -92,16 +90,16 @@ Img=           # deferred
 Iso=           # deferred
 
 
-function doesImgExist { [[ -f "$1" ]] && [[ "$(grep -E '^.+\.img$' <<<$1)" == "$1" ]] ; }
+DoesImgExist() { [[ -f "$1" ]] && [[ "$(grep -E '^.+\.img$' <<<$1)" == "$1" ]] ; }
 
-function doesIsoExist { [[ -f "$1" ]] && [[ "$(grep -E '^.+\.iso$' <<<$1)" == "$1" ]] ; }
+DoesIsoExist() { [[ -f "$1" ]] && [[ "$(grep -E '^.+\.iso$' <<<$1)" == "$1" ]] ; }
 
-function isInteger { [[ "$1" =~ ^([0-9]+)$ ]] ; }
+IsInteger() { [[ "$1" =~ ^([0-9]+)$ ]] ; }
 
-function isValidSelection # (option_n , n_options)
+IsValidSelection() # (option_n , n_options)
 {
-  local option_n=$( isInteger $1 && echo $1 || echo '-1')
-  local n_options=$(isInteger $2 && echo $2 || echo '0' )
+  local option_n=$( IsInteger $1 && echo $1 || echo '-1')
+  local n_options=$(IsInteger $2 && echo $2 || echo '0' )
 
   [[ "$option_n" -ge "0" ]] && [[ "$option_n" -le "$n_options" ]]
 }
@@ -116,18 +114,18 @@ PrintIsoOptions()
   for iso_n in "${!ISOS[@]}" ; do echo "$(( $iso_n + 1 ))) ${ISOS[$iso_n]##*/}" ; done ;
 }
 
-function selectImage # (img_n)
+SelectImage() # (img_n)
 {
   local img_n=$1
-  local img_selection=$(isValidSelection $img_n $N_IMGS && echo $img_n || echo '-1')
+  local img_selection=$(IsValidSelection $img_n $N_IMGS && echo $img_n || echo '-1')
 
   if   (( $N_IMGS > 0 ))
-  then until isValidSelection $img_selection $N_IMGS
+  then until IsValidSelection $img_selection $N_IMGS
        do    echo -e "Select a primary disk:\n" ; PrintImgOptions ;
              echo -en "\nChoice (1$( (( $N_IMGS > 1 )) && echo "-$N_IMGS"), 0=quit): "
              read img_selection ; [[ "$img_selection" == '0' ]] && exit
 
-             if ! isValidSelection $img_selection $N_IMGS
+             if ! IsValidSelection $img_selection $N_IMGS
              then clear ; echo "Selection ($img_selection) out of range" ;
              fi
        done
@@ -140,17 +138,17 @@ function selectImage # (img_n)
   Img=$VM_DIR/$ImgDir/$ImgDir.img
 }
 
-function selectIso
+SelectIso()
 {
   local iso_selection='-1'
 
   if (( $N_ISOS > 0 ))
-  then until isValidSelection $iso_selection $N_ISOS
+  then until IsValidSelection $iso_selection $N_ISOS
        do    echo -e "Select a boot ISO:\n" ; PrintIsoOptions ;
              echo -en "\nChoice (1$( (( $N_ISOS > 1 )) && echo "-$N_ISOS"), 0=quit): "
              read iso_selection ; [[ "$iso_selection" == '0' ]] && exit
 
-             if ! isValidSelection $iso_selection $N_ISOS
+             if ! IsValidSelection $iso_selection $N_ISOS
              then clear ; echo "Selection ($iso_selection) out of range" ;
              fi
        done
@@ -161,7 +159,7 @@ function selectIso
   Iso=${ISOS[$(( $iso_selection - 1 ))]}
 }
 
-function waitSsh
+WaitSsh()
 {
   ssh-keygen -f "~/.ssh/known_hosts" -R [localhost]:$VM_SSH_PORT
   while (( $WAIT_SSH > 0 ))
@@ -181,30 +179,30 @@ function waitSsh
 
 # determine which VM image to launch
 if   [[ -n "$IMG_NAME_OR_N" ]]
-then if ! isInteger $IMG_NAME_OR_N
+then if ! IsInteger $IMG_NAME_OR_N
      then # find image by img name
-          for img in "$IMG_NAME_OR_N" "$IMG_FULL_PATH" ; do doesImgExist $img && Img=$img ; done ;
+          for img in "$IMG_NAME_OR_N" "$IMG_FULL_PATH" ; do DoesImgExist $img && Img=$img ; done ;
           [[ "$Img" ]]                            || echo "\$Img not found at '$IMG_NAME_OR_N' or '$IMG_FULL_PATH'"
-     else isValidSelection $IMG_NAME_OR_N $N_IMGS || echo "\$Selection ($IMG_NAME_OR_N) out of range"
+     else IsValidSelection $IMG_NAME_OR_N $N_IMGS || echo "\$Selection ($IMG_NAME_OR_N) out of range"
      fi
 fi
-[[ -z "$ISO" ]] || doesIsoExist "$ISO" || echo "\$ISO not found at: '$ISO'"
-until doesImgExist $Img
+[[ -z "$ISO" ]] || DoesIsoExist "$ISO" || echo "\$ISO not found at: '$ISO'"
+until DoesImgExist $Img
 do    # find image by img_n
-      selectImage $IMG_NAME_OR_N ; clear ;
+      SelectImage $IMG_NAME_OR_N ; clear ;
 done
 
 # determine which ISO to boot
-if   doesIsoExist "$ISO"
+if   DoesIsoExist "$ISO"
 then Iso="$ISO"
 else [[ "$ISO" ]] && echo "\$ISO not found at '$ISO'"
      if   [[ "$ImgDir" == "$SCRATCH_IMG_NAME" ]]
-     then until doesIsoExist "$Iso" ; do selectIso ; clear ; done ;
+     then until DoesIsoExist "$Iso" ; do SelectIso ; clear ; done ;
      fi
 fi
 
-echo -e "Selected:\n\tIso: $Iso\n\tImg: $Img"
-
+# log results
+echo -e "Selected:$( [[ "$Iso" ]] && echo "\n\tIso: $Iso")\n\tImg: $Img"
 
 # prepare the environment
 [[ -f $OverridesFile    ]] && source $OverridesFile
@@ -215,7 +213,7 @@ echo -e "Selected:\n\tIso: $Iso\n\tImg: $Img"
 [[ "$ARCH" == 'x86_64'  ]] && ARCH="x86_64 -enable-kvm"
 [[ "$ImgDir"            ]] && NAME="-name $ImgDir"
 [[ "$IMG_B"             ]] && HD="-drive file=$IMG_B,format=raw,cache=writeback"
-doesIsoExist "$Iso"        && CD="-cdrom $Iso" BOOT="-boot order=d"                 || CD="" BOOT=""
+DoesIsoExist "$Iso"        && CD="-cdrom $Iso" BOOT="-boot order=d"                 || CD="" BOOT=""
 [[ "$MEM"               ]] && MEM="-m $MEM"                                         || MEM="-m $DEF_MEM"
 [[ "$VGA"               ]] && VGA="-vga $VGA"                                       || VGA="-vga $DEF_VGA"
 [[ "$VM_SSH_PORT"       ]] && FWD_SSH=",hostfwd=tcp::$VM_SSH_PORT-:22"              || FWD_SSH=''
@@ -241,8 +239,8 @@ fi
 
 # prepare A/V
 AUDIO='-device intel-hda -device hda-duplex'
-VIDEO_VNC="-display vnc=:0"
-VIDEO_SDL="-display sdl,show-cursor=on" #  -no-frame"
+VIDEO_VNC='-display vnc=:0'
+VIDEO_SDL='-display sdl,show-cursor=on' # -no-frame'
 (( ${IS_HEADLESS} )) && VIDEO="${VIDEO_VNC}" || VIDEO="${VIDEO_SDL}"
 MISC=''
 
@@ -257,6 +255,7 @@ then virtio_modules=`lsmod | grep virtio`
      #[[ "`echo $virtio_modules | grep virtio_balloon`" == "" ]] && su -c 'modprobe virtio-balloon'
 fi
 
+
 # concatenate command line and report
 [[ "$FWD_SSH"  ]] && ( [[ "$NET" ]] && echo "SSH port 22 forwarded to localhost:$VM_SSH_PORT" || \
                                        echo "no USE_VIRT* enabled - SSH will not be forwarded"   )
@@ -268,6 +267,6 @@ echo "$CMD"
 
 # launch VM and optionally login ssh
 if   [[ "$SSH" ]] && [[ "$WAIT_SSH" ]]
-then $CMD & waitSsh && $SSH
+then $CMD & WaitSsh && $SSH
 else $CMD
 fi
