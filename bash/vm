@@ -106,31 +106,40 @@ IsValidSelection() # (option_n , n_options)
 
 PrintImgOptions()
 {
-  for img_dir_n in "${!IMG_DIRS[@]}" ; do echo "$(( $img_dir_n+1 ))) ${IMG_DIRS[$img_dir_n]}" ; done ;
+  local img_dir_n
+
+  for img_dir_n in "${!IMG_DIRS[@]}" ; do echo "$(( $img_dir_n + 1 )) ${IMG_DIRS[$img_dir_n]}" ; done ;
 }
 
 PrintIsoOptions()
 {
-  for iso_n in "${!ISOS[@]}" ; do echo "$(( $iso_n + 1 ))) ${ISOS[$iso_n]##*/}" ; done ;
+  local iso_n
+
+  for iso_n in "${!ISOS[@]}" ; do echo "$(( $iso_n + 1 )) ${ISOS[$iso_n]##*/}" ; done ;
 }
 
-SelectImage() # (img_n)
+VmDlg() # (err_msg dialog_args*)
+{
+  local err_msg=$( [[ -n "$1" ]] && echo -n "\Z1$1\Zn" ) ; shift ;
+
+  dialog --stdout --backtitle "KISS VM Manager" --colors --title "$err_msg" "$@"
+}
+
+SelectImage() # (img_n dlg_err_msg)
 {
   local img_n=$1
+  local dlg_err_msg="$2"
   local img_selection=$(IsValidSelection $img_n $N_IMGS && echo $img_n || echo '-1')
 
   if   (( $N_IMGS > 0 ))
-  then until IsValidSelection $img_selection $N_IMGS
-       do    echo -e "Select a primary disk:\n" ; PrintImgOptions ;
-             echo -en "\nChoice (1$( (( $N_IMGS > 1 )) && echo "-$N_IMGS"), 0=quit): "
-             read img_selection ; [[ "$img_selection" == '0' ]] && exit
-
-             if ! IsValidSelection $img_selection $N_IMGS
-             then clear ; echo "Selection ($img_selection) out of range" ;
-             fi
-       done
+  then IsValidSelection $img_selection $N_IMGS                      || \
+       img_selection=$( VmDlg "$dlg_err_msg"                           \
+                              --menu "Select a primary disk:" 20 70 50 \
+                              $(PrintImgOptions)                       )
+       clear
+       [[ "$img_selection" != '' ]] || return 1
   else echo "no conventionally-named images found in \$VM_DIR '$VM_DIR/'"
-       exit 1
+       return 1
   fi
 
   ImgDir=${IMG_DIRS[$(( $img_selection - 1 ))]}
@@ -143,17 +152,13 @@ SelectIso()
   local iso_selection='-1'
 
   if (( $N_ISOS > 0 ))
-  then until IsValidSelection $iso_selection $N_ISOS
-       do    echo -e "Select a boot ISO:\n" ; PrintIsoOptions ;
-             echo -en "\nChoice (1$( (( $N_ISOS > 1 )) && echo "-$N_ISOS"), 0=quit): "
-             read iso_selection ; [[ "$iso_selection" == '0' ]] && exit
-
-             if ! IsValidSelection $iso_selection $N_ISOS
-             then clear ; echo "Selection ($iso_selection) out of range" ;
-             fi
-       done
+  then IsValidSelection $iso_selection $N_ISOS                     || \
+       iso_selection=$( VmDlg '' --menu "Select a boot ISO:" 20 70 50 \
+                              $(PrintIsoOptions)                      )
+       clear
+       [[ "$iso_selection" != '' ]] || return 1
   else echo "no ISOs found in \$ISOS_DIR: '$ISOS_DIR/'"
-       exit 1
+       return 1
   fi
 
   Iso=${ISOS[$(( $iso_selection - 1 ))]}
@@ -172,10 +177,10 @@ WaitSsh()
 
 ## main entry ##
 
-(( $HAS_LIST_SWITCH )) && PrintImgOptions                && exit
-(( $HAS_HELP_SWITCH )) && echo "$USAGE"                  && exit
-[[   -z "$VM_DIR"   ]] && echo "$VM_DIR_NULL_ERR_MSG"    && exit
-[[ ! -d "$VM_DIR"   ]] && echo "$VM_DIR_MISSING_ERR_MSG" && exit
+(( $HAS_LIST_SWITCH )) && PrintImgOptions | sed 's|^\([0-9]*\) |\1) |' && exit
+(( $HAS_HELP_SWITCH )) && echo "$USAGE"                                && exit
+[[   -z "$VM_DIR"   ]] && echo "$VM_DIR_NULL_ERR_MSG"                  && exit
+[[ ! -d "$VM_DIR"   ]] && echo "$VM_DIR_MISSING_ERR_MSG"               && exit
 
 # determine which VM image to launch
 if   [[ -n "$IMG_NAME_OR_N" ]]
@@ -186,19 +191,15 @@ then if ! IsInteger $IMG_NAME_OR_N
      else IsValidSelection $IMG_NAME_OR_N $N_IMGS || echo "\$Selection ($IMG_NAME_OR_N) out of range"
      fi
 fi
-[[ -z "$ISO" ]] || DoesIsoExist "$ISO" || echo "\$ISO not found at: '$ISO'"
-until DoesImgExist $Img
-do    # find image by img_n
-      SelectImage $IMG_NAME_OR_N ; clear ;
-done
+
+# find image by img_n, or prompt
+IsoErrMsg="$( [[ -z "$ISO" ]] || DoesIsoExist "$ISO" || echo "\$ISO not found at: '$ISO'")"
+DoesImgExist $Img || SelectImage "$IMG_NAME_OR_N" "$IsoErrMsg" || exit 1
 
 # determine which ISO to boot
-if   DoesIsoExist "$ISO"
-then Iso="$ISO"
-else [[ "$ISO" ]] && echo "\$ISO not found at '$ISO'"
-     if   [[ "$ImgDir" == "$SCRATCH_IMG_NAME" ]]
-     then until DoesIsoExist "$Iso" ; do SelectIso ; clear ; done ;
-     fi
+Iso="$ISO"
+if   ! DoesIsoExist "$Iso" && [[ "$ImgDir" == "$SCRATCH_IMG_NAME" ]]
+then until DoesIsoExist "$Iso" ; do SelectIso || exit 1 ; done ;
 fi
 
 # log results
