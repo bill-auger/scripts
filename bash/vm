@@ -17,9 +17,9 @@ ENVIRONMENT:
 
     * VM_DIR       - (mandatory) full path to parent directory of VM subdirectories
     * ARCH         - (optional)  launches qemu-system-$ARCH (default: 'x86_64 + kvm + smp')
-    * MEM          - (optional)  specifies VM memory size (default: 1G)
-    * ISO          - (optional)  .iso file for first optical disc - set as primary boot media (default: none)
-    * IMG_B        - (optional)  .img file for second hard disk (default: none)
+    * MEM          - (optional)  specifies VM memory size (default: 2G)
+    * ISO          - (optional)  full path to .iso file for first optical disc - set as primary boot media (default: none)
+    * IMG_B        - (optional)  full path to .img file for second hard disk (default: none)
     * SMP          - (optional)  SMP options as CSV: N_CORES,N_THREADS,N_SOCKETS (default: 2,1,1)
     * VM_SSH_PORT  - (optional)  host port to bind to guest port tcp/22
     * VM_HTTP_PORT - (optional)  host port to bind to guest port tcp/80
@@ -29,19 +29,19 @@ ENVIRONMENT:
 
 EXAMPLES:
 
-    vm                     # present a alphabetical list of VMs and wait for choice
-    vm /home/me/vm.img     # launch a VM by absolute or relative path to an image file
+    vm                     # present an alphabetical list of VMs, and wait for choice
+    vm /home/me/vm.img     # launch a VM by path to an image file (absolute or relative)
     vm img-dir             # launch $VM_DIR/img-dir/img-dir.img if it exists
     vm -h (or --help)      # present this message then quit
-    vm -l (or --list)      # present a alphabetical list of VMs then quit
-    vm 1                   # launch a VM by it's current order number from `vm --list`
+    vm -l (or --list)      # present an alphabetical list of VMs, then quit
+    vm 1                   # launch a VM by it's current order number (per `vm --list`)
     ARCH=i386          vm  # launch 32-bit x86 VM
     MEM=1G             vm  # launch VM using 1GB of system memory
     ISO=/path/to/iso   vm  # boot from .iso file
     IMG_B=/path/to/img vm  # mount second hard disk
-    VM_SSH_PORT=       vm  # do not forward ssh
-    VM_HTTP_PORT=      vm  # do not forward http
-    VM_SSH_LOGIN=      vm  # forward ssh but do not login
+    VM_SSH_PORT=       vm  # do not forward SSH
+    VM_HTTP_PORT=      vm  # do not forward HTTP
+    VM_SSH_LOGIN=      vm  # forward SSH but do not login
     VM_WAIT_SSH=60     vm  # wait N seconds to login
 USAGE_END
 readonly HAS_LIST_SWITCH=$([ "$1" == "-l" -o "$1" == "--list" ] && echo 1 || echo 0)
