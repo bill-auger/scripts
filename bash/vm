@@ -240,12 +240,11 @@ then [[ "$VM_SSH_PORT" ]] && [[ "$VM_SSH_LOGIN"    ]] && SSH="ssh -o StrictHostK
 fi
 
 # prepare A/V
-AUDIO="-soundhw hda"
-#VIDEO_SDL="-display sdl -no-frame"
-VIDEO_SDL="-display sdl"
+AUDIO='-device intel-hda -device hda-duplex'
 VIDEO_VNC="-display vnc=:0"
+VIDEO_SDL="-display sdl,show-cursor=on" #  -no-frame"
 (( ${IS_HEADLESS} )) && VIDEO="${VIDEO_VNC}" || VIDEO="${VIDEO_SDL}"
-MISC="-show-cursor"
+MISC=''
 
 
 # load virtio kernel modules
