@@ -57,38 +57,70 @@ readonly SCRATCH_IMG_NAME="scratch"
 readonly ISOS_DIR=$VM_DIR/$ISOS_DIR_NAME
 readonly SCRATCH_IMG_DIR=$VM_DIR/$SCRATCH_IMG_NAME
 readonly SCRATCH_IMG=$SCRATCH_IMG_DIR/$SCRATCH_IMG_NAME.img
-declare -r -a IMG_DIRS=( $(
-  [[ -d "$SCRATCH_IMG_DIR/" ]] || mkdir -p "$SCRATCH_IMG_DIR"       1>&2
-  [[ -f $SCRATCH_IMG        ]] || qemu-img create "$SCRATCH_IMG" 9G 1>&2
-  [[ -f $SCRATCH_IMG        ]] && [[ "$IMG_B" != "$SCRATCH_IMG" ]] && echo $SCRATCH_IMG_NAME
-
-  for img_full_path in $(ls -d $VM_DIR/*/*.img 2> /dev/null)
-  do  dir=$(basename $(dirname $img_full_path))
-      img=$(basename           $img_full_path)
-      [[ "$dir" != "$SCRATCH_IMG_NAME" ]] && [[ "$img_full_path" != "$IMG_B" ]] || continue
-
-      grep "^$dir\.img$" <<<$img > /dev/null && echo $dir
-  done
-) )
-declare -r -a ISOS=( $(
-  [[ -d "$ISOS_DIR/" ]] || mkdir -p "$ISOS_DIR"
-
-  find $ISOS_DIR/ -name *.iso 2> /dev/null
-) )
-readonly N_IMGS=${#IMG_DIRS[@]}
-readonly N_ISOS=${#ISOS[@]}
 readonly SMP_REGEX="^[0-9],[0-9],[0-9]$"
 readonly DEF_MEM='2G'
 readonly DEF_VGA='std' # cirrus, qxl, std, vmware
 readonly USE_VIRTIO=0
 readonly USE_VIRTFS=0
 readonly USE_VIRTSMB=0
+IMG_DIRS=() # deferred
+ISOS=()     # deferred
+N_IMGS=0    # deferred
+N_ISOS=0    # deferred
 
 ImgDir=        # deferred
 OverridesFile= # deferred
 Img=           # deferred
 Iso=           # deferred
 
+
+PopulateImgDirs()
+{
+  (( ${#IMG_DIRS[@]} == 0 )) || return
+
+  local img_full_path dir img
+
+  IMG_DIRS=( $(
+    [[ -d "$SCRATCH_IMG_DIR/" ]] || mkdir -p "$SCRATCH_IMG_DIR"       1>&2
+    [[ -f $SCRATCH_IMG        ]] || qemu-img create "$SCRATCH_IMG" 9G 1>&2
+    [[ -f $SCRATCH_IMG        ]] && [[ "$IMG_B" != "$SCRATCH_IMG" ]] && echo $SCRATCH_IMG_NAME
+    for img_full_path in $(ls -d $VM_DIR/*/*.img 2> /dev/null)
+    do  dir=$(basename $(dirname $img_full_path))
+        img=$(basename           $img_full_path )
+        [[ "$dir" != "$SCRATCH_IMG_NAME" ]] && [[ "$img_full_path" != "$IMG_B" ]] || continue
+
+        grep "^$dir\.img$" <<<$img > /dev/null && echo $dir
+    done
+  ) )
+  readonly IMG_DIRS
+  readonly N_IMGS=${#IMG_DIRS[@]}
+}
+
+PopulateIsos()
+{
+  (( ${#ISOS[@]} == 0 )) || return
+
+  local unsorted_isos sorted_isos iso_n sorted_iso_n
+
+  unsorted_isos=( $(
+    [[ -d "$ISOS_DIR/" ]] || mkdir -p "$ISOS_DIR"
+
+    find $ISOS_DIR/ -name *.iso 2> /dev/null
+  ) )
+  sorted_isos=( $(
+    for (( iso_n = 0 ; iso_n < ${#unsorted_isos[@]} ; ++iso_n ))
+    do  echo "${unsorted_isos[$iso_n]##*\/}/$iso_n"
+    done | sort
+  ) )
+  for (( iso_n = 0 ; iso_n < ${#sorted_isos[@]} ; ++iso_n ))
+  do  sorted_iso_n=${sorted_isos[$iso_n]#*\/}
+
+      ISOS[$iso_n]="${unsorted_isos[$sorted_iso_n]}"
+  done
+
+  readonly ISOS
+  readonly N_ISOS=${#ISOS[@]}
+}
 
 DoesImgExist() { [[ -f "$1" ]] && [[ "$(grep -E '^.+\.img$' <<<$1)" == "$1" ]] ; }
 
@@ -182,6 +214,10 @@ WaitSsh()
 [[   -z "$VM_DIR"   ]] && echo "$VM_DIR_NULL_ERR_MSG"                  && exit
 [[ ! -d "$VM_DIR"   ]] && echo "$VM_DIR_MISSING_ERR_MSG"               && exit
 
+
+# initialize data
+PopulateImgDirs ; PopulateIsos ;
+
 # determine which VM image to launch
 if   [[ -n "$IMG_NAME_OR_N" ]]
 then if ! IsInteger $IMG_NAME_OR_N
@@ -199,7 +235,9 @@ DoesImgExist $Img || SelectImage "$IMG_NAME_OR_N" "$IsoErrMsg" || exit 1
 # determine which ISO to boot
 Iso="$ISO"
 if   ! DoesIsoExist "$Iso" && [[ "$ImgDir" == "$SCRATCH_IMG_NAME" ]]
-then until DoesIsoExist "$Iso" ; do SelectIso || exit 1 ; done ;
+then (( $(ls *.iso | wc -l) == 1 )) && Iso=$(ls *.iso)
+
+     until DoesIsoExist "$Iso" ; do SelectIso || exit 1 ; done ;
 fi
 
 # log results
