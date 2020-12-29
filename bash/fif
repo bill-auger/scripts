@@ -9,7 +9,7 @@ readonly TERM=$2
 readonly USER_FILTER=$3
 readonly DEFAULT_FILTER="~$|\.kate-swp$|\.o$|\.git/|\.Po$|node_modules/"
 [ "$USER_FILTER" ] && FILTER="$USER_FILTER|$DEFAULT_FILTER" || FILTER="$DEFAULT_FILTER"
-read -r -d '' USAGE <<-'USAGE_MSG'
+read -r -d '' USAGE <<-USAGE_MSG
 fif - Find In Files
 
 USAGE:
@@ -24,12 +24,11 @@ DESCRIPTION:
     Search <DIR> recursively for all files containing <TERM>
     Returns names of files containing <TERM> (excluding <FILTER> regex match)
     <TERM> and <FILTER> must be quoted in all but the simplest cases
-    Default filters are: *~, *.kate-swp, *.o, *.git/*
+    Default filters are: ${DEFAULT_FILTER}
 USAGE_MSG
 
-
+set -e
 case $TERM in
-  "" ) printf "$USAGE\n" ;;
-  *  ) find $DIR | xargs grep -ls "$TERM" | grep -v -E "$FILTER" ;;
+  '' ) printf "$USAGE\n" ;;
+  *  ) find $DIR -print0 | xargs --null grep -ls "$TERM" | grep -v -E "$FILTER" ;;
 esac
-
