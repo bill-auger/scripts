@@ -1,0 +1,31 @@
+#!/bin/bash
+
+gitcommonancestor() # ([-s] ref_a ref_b)
+{
+  local is_short=$( [[ "$1" == '-s' ]] ; echo $(( ! $? )) ) ; (( is_short )) && shift ;
+  local fmt=$(      (( is_short     )) && echo "%h" || echo "%h %ad %an [%G?] %s %d" )
+  local ref_a=$1
+  local ref_b=$(    [[ -n "$2"      ]] && echo $2 || echo HEAD )
+
+  [[ -n "${ref_a}" ]] || ! echo "no ref specified" || return 1
+
+  git log -n1 --format="${fmt}" --date=short $(git merge-base ${ref_a} ${ref_b})
+}
+
+main()
+{
+  local branch=$( [[ -n "$1"      ]] && echo $1 || echo '*' )
+  local branches=( $(git branch --list "${BRANCH}" | grep -v master | sed 's|^\* |  |') )
+  local common_ancestor
+  local changed_files
+
+  for branch in ${branches[*]}
+  do  common_ancestor=$(gitcommonancestor -s master ${branch})
+      changed_files=( $(git diff --name-only ${common_ancestor} ${branch}) )
+
+      echo '---' ; printf "[${branch}]: %s\n" "${changed_files[@]}"
+  done | column -t
+}
+
+
+main "$@"

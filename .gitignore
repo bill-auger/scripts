@@ -5,6 +5,7 @@ bash/*
 !bash/duse
 !bash/fif
 !bash/guake-quick-open.sh
+!bash/git-branch-diffs
 !bash/pkuse
 !bash/speed
 !bash/toggle-mic.sh
