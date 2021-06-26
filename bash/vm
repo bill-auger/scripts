@@ -51,10 +51,11 @@ readonly IMG_NAME_OR_N=$1                                          # pending val
 readonly IMG_FULL_PATH="$VM_DIR/$IMG_NAME_OR_N/$IMG_NAME_OR_N.img" # pending validation
 readonly QEMU_ARGS=$(args="$*" ; echo $args | grep ' -' > /dev/null && echo "-${args#* -}" )
 readonly IS_HEADLESS=$( [[ ! -f /usr/lib/qemu/ui-sdl.so ]] && echo 1 || echo 0 )
-readonly VM_DIR_NULL_ERR_MSG="VM_DIR must be defined in the environment"
-readonly VM_DIR_MISSING_ERR_MSG="VM_DIR not found: '$VM_DIR'"
-readonly ISOS_DIR_NAME="isos"
-readonly SCRATCH_IMG_NAME="scratch"
+readonly VM_DIR_NULL_ERR_MSG="\$VM_DIR must be defined in the environment"
+readonly VM_DIR_MISSING_ERR_MSG="\$VM_DIR not found: '$VM_DIR'"
+readonly IMG_MOUNTED_ERR_MSG="\$Img is mounted"
+readonly ISOS_DIR_NAME='isos'
+readonly SCRATCH_IMG_NAME='scratch'
 readonly SCRATCH_IMG_SIZE=1G
 readonly ISO_NONE='None'
 readonly ISOS_DIR=$VM_DIR/$ISOS_DIR_NAME
@@ -125,6 +126,7 @@ PopulateIsos()
       ISOS[$iso_n]="${unsorted_isos[$sorted_iso_n]}"
   done
   ISOS[$iso_n]=${ISO_NONE}
+
   readonly ISOS
   readonly N_ISOS=${#ISOS[@]}
 }
@@ -132,6 +134,8 @@ PopulateIsos()
 DoesImgExist() { [[ -f "$1" ]] && [[ "$(grep -E '^.+\.img$' <<<$1)" == "$1" ]] ; }
 
 DoesIsoExist() { [[ -f "$1" ]] && [[ "$(grep -E '^.+\.iso$' <<<$1)" == "$1" ]] ; }
+
+IsImgMounted() { DoesImgExist "$1" && grep "$1" < <(losetup -l) ; return $(( $? )) ; }
 
 IsInteger() { [[ "$1" =~ ^([0-9]+)$ ]] ; }
 
@@ -167,7 +171,7 @@ VmDlg() # (err_msg dialog_args*)
 SelectImage() # (img_n dlg_err_msg)
 {
   local img_n=$1
-  local dlg_err_msg="$2"
+  local dlg_err_msg="$( [[ -z "$ISO" ]] || DoesIsoExist "$ISO" || echo "\$ISO not found")"
   local img_selection=$(IsValidSelection $img_n $N_IMGS && echo $img_n || echo '-1')
 
   if   (( $N_IMGS > 0 ))
@@ -206,7 +210,7 @@ SelectIso()
 WaitSsh()
 {
   ssh-keygen -f "~/.ssh/known_hosts" -R [localhost]:$VM_SSH_PORT
-  while (( $WAIT_SSH > 0 ))
+  while (( WAIT_SSH > 0 ))
   do    WAIT_SSH=($WAIT_SSH-1)
         Clear ; echo "logging in ssh in $(($WAIT_SSH+1)) seconds" ;
         sleep 1
@@ -236,13 +240,13 @@ then if ! IsInteger $IMG_NAME_OR_N
 fi
 
 # find image by img_n, or prompt
-IsoErrMsg="$( [[ -z "$ISO" ]] || DoesIsoExist "$ISO" || echo "\$ISO not found at: '$ISO'")"
-DoesImgExist $Img || SelectImage "$IMG_NAME_OR_N" "$IsoErrMsg" || exit 1
+DoesImgExist $Img || SelectImage "$IMG_NAME_OR_N" || exit 1
+IsImgMounted $Img && echo "$IMG_MOUNTED_ERR_MSG"  && exit 1
 
 # determine which ISO to boot
 Iso="$ISO"
 if   ! DoesIsoExist "$Iso" && [[ "$ImgDir" == "$SCRATCH_IMG_NAME" ]]
-then (( $(ls *.iso | wc -l) == 1 )) && Iso=$(ls *.iso)
+then (( $(ls *.iso | wc -l) == 1 )) && Iso=$(ls *.iso) || true # pwd override
 
      until DoesIsoExist "$Iso" || [[ "$Iso" == "${ISO_NONE}" ]] ; do SelectIso || exit 1 ; done ;
 fi
@@ -312,6 +316,7 @@ fi
                                        echo "no USE_VIRT* enabled - HTTP will not be forwarded"               )
 CMD="$QEMU $CPU $MEM $HD $CD $BOOT $NET $AUDIO $VIDEO $MISC $QEMU_ARGS"
 msg="launching vm: '$(echo "$Img" | grep -E '^.+\.img$' | sed -e 's/^\(.*\/\)\?\(.*\).img$/\2/')'"
+
 
 # launch VM and optionally login ssh
 if   [[ "$1" == '--cmd' ]]
