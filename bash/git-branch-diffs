@@ -1,5 +1,11 @@
 #!/bin/bash
 
+readonly SHOW_DIFFS=$( [[ "$1" == '-d' ]] ; echo $(( ! $? )) ) ; (( SHOW_DIFFS )) && shift ;
+readonly BRANCH=$(     [[ -n "$1"      ]] && echo $1 || echo '*' )
+readonly BRANCHES=( $( git branch --list "${BRANCH}" | grep -v master | sed 's|^\* |  |' ) )
+
+
+
 gitcommonancestor() # ([-s] ref_a ref_b)
 {
   local is_short=$( [[ "$1" == '-s' ]] ; echo $(( ! $? )) ) ; (( is_short )) && shift ;
@@ -14,18 +20,23 @@ gitcommonancestor() # ([-s] ref_a ref_b)
 
 main()
 {
-  local branch=$( [[ -n "$1"      ]] && echo $1 || echo '*' )
-  local branches=( $(git branch --list "${BRANCH}" | grep -v master | sed 's|^\* |  |') )
+  local branch
   local common_ancestor
   local changed_files
 
-  for branch in ${branches[*]}
+  for branch in ${BRANCHES[*]}
   do  common_ancestor=$(gitcommonancestor -s master ${branch})
       changed_files=( $(git diff --name-only ${common_ancestor} ${branch}) )
 
-      echo '---' ; printf "[${branch}]: %s\n" "${changed_files[@]}"
-  done | column -t
+      if   (( SHOW_DIFFS ))
+      then git diff ${common_ancestor} ${branch}
+      else echo '---' ; printf "[${branch}]: %s\n" "${changed_files[@]}"
+      fi
+  done
 }
 
 
-main "$@"
+if   (( SHOW_DIFFS ))
+then main "$@"
+else main "$@" | column -t
+fi
