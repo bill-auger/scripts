@@ -23,6 +23,8 @@ main()
   local branch
   local common_ancestor
   local changed_files
+  local changed_file
+  local dt
 
   for branch in ${BRANCHES[*]}
   do  common_ancestor=$(gitcommonancestor -s master ${branch})
@@ -30,7 +32,10 @@ main()
 
       if   (( SHOW_DIFFS ))
       then git diff ${common_ancestor} ${branch}
-      else echo '---' ; printf "[${branch}]: %s\n" "${changed_files[@]}"
+      else for changed_file in "${changed_files[@]}"
+           do  dt=$(git log -1 --format='%cs' ${branch} -- "$(git rev-parse --show-toplevel)/${changed_file}")
+               echo '---' ; printf "[${branch}]: %s %s\n" "${dt}" "${changed_file}"
+           done
       fi
   done
 }
