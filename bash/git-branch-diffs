@@ -3,7 +3,7 @@
 readonly SHOW_DIFFS=$( [[ "$1" == '-d' ]] ; echo $(( ! $? )) ) ; (( SHOW_DIFFS )) && shift ;
 readonly BRANCH=$(     [[ -n "$1"      ]] && echo $1 || echo '*' )
 readonly BRANCHES=( $( git branch --list "${BRANCH}" | grep -v master | sed 's|^\* |  |' ) )
-
+readonly AMBIGUOUS_RX="warning: refname '.*' is ambiguous."
 
 
 gitcommonancestor() # ([-s] ref_a ref_b)
@@ -18,7 +18,17 @@ gitcommonancestor() # ([-s] ref_a ref_b)
   git log -n1 --format="${fmt}" --date=short $(git merge-base ${ref_a} ${ref_b})
 }
 
-main()
+isUnambiguousRef() # (branch)
+{
+  local branch=$1
+  local ambiguous_warning="$(git log -1 ${branch} 2>&1 1>/dev/null | grep "${AMBIGUOUS_RX}")"
+
+  [[ -n "${ambiguous_warning}" ]] && echo "${ambiguous_warning}" >&2
+
+  [[ -z "${ambiguous_warning}" ]]
+}
+
+main() # ( [-d] [branch] )
 {
   local branch
   local common_ancestor
@@ -27,7 +37,9 @@ main()
   local dt
 
   for branch in ${BRANCHES[*]}
-  do  common_ancestor=$(gitcommonancestor -s master ${branch})
+  do  isUnambiguousRef ${branch} || continue
+
+      common_ancestor=$(gitcommonancestor -s master ${branch})
       changed_files=( $(git diff --name-only ${common_ancestor} ${branch}) )
 
       if   (( SHOW_DIFFS ))
