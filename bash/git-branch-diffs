@@ -1,12 +1,61 @@
 #!/bin/bash
 
-readonly SHOW_DIFFS=$( [[ "$1" == '-d' ]] ; echo $(( ! $? )) ) ; (( SHOW_DIFFS )) && shift ;
-readonly BRANCH=$(     [[ -n "$1"      ]] && echo $1 || echo '*' )
-readonly BRANCHES=( $( git branch --list "${BRANCH}" | grep -v master | sed 's|^\* |  |' ) )
+readonly USAGE="git-branch-diffs [-b <branch>] [-d] [-p <path>]* [<\"search-regex\">]
+
+Report which files differ per-branch compared to the master branch.
+
+OPTIONS:
+  -b <branch>
+    Consider only the specified branch.
+  -d
+    Display verbose diffs (like \`git diff\`)
+  -p <path>
+    Consider only the specified filesystem path.
+    The argument may be absolute, or relative to the present working directory.
+    This option may be given multiple times.
+  <\"search-regex\">
+    Filter returned results (like piping to \`grep\`).
+"
 readonly AMBIGUOUS_RX="warning: refname '.*' is ambiguous."
 
+ShowDiffs=0    # HhandleCliArgs()
+Branches=()    # HandleCliArgs()
+Paths=()       # HandleCliArgs()
+SearchRegex='' # HandleCliArgs()
 
-gitcommonancestor() # ([-s] ref_a ref_b)
+
+HandleCliArgs()
+{
+  ShowDiffs=0
+  local filter_branch='*'
+
+  while getopts 'b:dp:' arg
+  do    case "${arg}" in
+          b) filter_branch=${OPTARG}      ;;
+          d) ShowDiffs=1                  ;;
+          p) Paths+=("${OPTARG}")         ;;
+          *) echo "${USAGE}" >&2 ; exit 1 ;;
+        esac
+  done
+  shift $((OPTIND - 1))
+
+  [[ "${filter_branch}" != master ]] || ! echo "branch may not be 'master'" || exit 1
+
+  SearchRegex=$( [[ -n "$1" ]] && echo "$1" || echo '.*' )
+  Branches=( $(git branch --list "${filter_branch}" | grep -v master | sed 's|^\* |  |') )
+}
+
+IsUnambiguousRef() # (branch)
+{
+  local branch=$1
+  local ambiguous_warning="$(git log -1 ${branch} 2>&1 1>/dev/null | grep "${AMBIGUOUS_RX}")"
+
+  [[ -n "${ambiguous_warning}" ]] && echo "${ambiguous_warning}" >&2
+
+  [[ -z "${ambiguous_warning}" ]]
+}
+
+GitCommonAncestor() # ([-s] ref_a ref_b)
 {
   local is_short=$( [[ "$1" == '-s' ]] ; echo $(( ! $? )) ) ; (( is_short )) && shift ;
   local fmt=$(      (( is_short     )) && echo "%h" || echo "%h %ad %an [%G?] %s %d" )
@@ -18,42 +67,45 @@ gitcommonancestor() # ([-s] ref_a ref_b)
   git log -n1 --format="${fmt}" --date=short $(git merge-base ${ref_a} ${ref_b})
 }
 
-isUnambiguousRef() # (branch)
-{
-  local branch=$1
-  local ambiguous_warning="$(git log -1 ${branch} 2>&1 1>/dev/null | grep "${AMBIGUOUS_RX}")"
-
-  [[ -n "${ambiguous_warning}" ]] && echo "${ambiguous_warning}" >&2
-
-  [[ -z "${ambiguous_warning}" ]]
-}
-
-main() # ( [-d] [branch] )
+Main()
 {
   local branch
   local common_ancestor
   local changed_files
-  local changed_file
   local dt
+  local changed_file
 
-  for branch in ${BRANCHES[*]}
-  do  isUnambiguousRef ${branch} || continue
+  for branch in ${Branches[*]}
+  do  IsUnambiguousRef ${branch} || continue
+      echo "scanning branch: $branch" >&2
 
-      common_ancestor=$(gitcommonancestor -s master ${branch})
-      changed_files=( $(git diff --name-only ${common_ancestor} ${branch}) )
+      # detect diffs
+      common_ancestor=$(GitCommonAncestor -s master ${branch})
+      if   (( ${#Paths[@]} ))
+      then changed_files=( $(git diff --name-only ${common_ancestor} ${branch} -- "${Paths[@]}") )
+      else changed_files=( $(git diff --name-only ${common_ancestor} ${branch}                 ) )
+      fi
 
-      if   (( SHOW_DIFFS ))
-      then git diff ${common_ancestor} ${branch}
+      (( ${#changed_files[@]} )) || continue
+
+      # present results
+      if   (( ShowDiffs ))
+      then dt=$(git log -1 --format='%cs' ${branch})
+           echo '---' ; printf "[${branch}]: %s\n" "${dt}" ;
+           git diff ${common_ancestor} ${branch} "${Paths[@]}"
       else for changed_file in "${changed_files[@]}"
-           do  dt=$(git log -1 --format='%cs' ${branch} -- "$(git rev-parse --show-toplevel)/${changed_file}")
-               echo '---' ; printf "[${branch}]: %s %s\n" "${dt}" "${changed_file}"
+           do  if   [[ "${changed_file}" =~ ${SearchRegex} ]]
+               then dt=$(git log -1 --format='%cs' ${branch} -- "${changed_file}")
+                    echo '---' ; printf "[${branch}]: %s %s\n" "${dt}" "${changed_file}"
+               fi
            done
       fi
   done
 }
 
 
-if   (( SHOW_DIFFS ))
-then main "$@"
-else main "$@" | column -t
+HandleCliArgs "$@"
+if   (( ShowDiffs ))
+then Main "$@"
+else Main "$@" | column -t
 fi
