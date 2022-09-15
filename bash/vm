@@ -55,6 +55,7 @@ readonly VM_DIR_NULL_ERR_MSG="VM_DIR must be defined in the environment"
 readonly VM_DIR_MISSING_ERR_MSG="VM_DIR not found: '$VM_DIR'"
 readonly ISOS_DIR_NAME="isos"
 readonly SCRATCH_IMG_NAME="scratch"
+readonly SCRATCH_IMG_SIZE=1G
 readonly ISOS_DIR=$VM_DIR/$ISOS_DIR_NAME
 readonly SCRATCH_IMG_DIR=$VM_DIR/$SCRATCH_IMG_NAME
 readonly SCRATCH_IMG=$SCRATCH_IMG_DIR/$SCRATCH_IMG_NAME.img
@@ -86,9 +87,9 @@ PopulateImgDirs()
   local img_full_path dir img
 
   IMG_DIRS=( $(
-    [[ -d "$SCRATCH_IMG_DIR/" ]] || mkdir -p "$SCRATCH_IMG_DIR"       1>&2
-    [[ -f $SCRATCH_IMG        ]] || qemu-img create "$SCRATCH_IMG" 9G 1>&2
-    [[ -f $SCRATCH_IMG        ]] && [[ "$IMG_B" != "$SCRATCH_IMG" ]] && echo $SCRATCH_IMG_NAME
+    [[ -d "$SCRATCH_IMG_DIR/" ]] || mkdir -p "$SCRATCH_IMG_DIR"                      >&2
+    [[ -f "$SCRATCH_IMG"      ]] || qemu-img create "$SCRATCH_IMG" $SCRATCH_IMG_SIZE >&2
+    [[ -f "$SCRATCH_IMG"      ]] && [[ "$IMG_B" != "$SCRATCH_IMG" ]] && echo $SCRATCH_IMG_NAME
     for img_full_path in $(ls -d $VM_DIR/*/*.img 2> /dev/null)
     do  dir=$(basename $(dirname $img_full_path))
         img=$(basename           $img_full_path )
