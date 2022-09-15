@@ -76,6 +76,9 @@ Img=           # deferred
 Iso=           # deferred
 
 
+SHOULD_CLR_SCREEN=1
+Clear() { (( SHOULD_CLR_SCREEN )) && clear ; }
+
 PopulateImgDirs()
 {
   (( ${#IMG_DIRS[@]} == 0 )) || return
@@ -170,7 +173,7 @@ SelectImage() # (img_n dlg_err_msg)
        img_selection=$( VmDlg "$dlg_err_msg"                           \
                               --menu "Select a primary disk:" 20 70 50 \
                               $(PrintImgOptions)                       )
-       clear
+       Clear
        [[ "$img_selection" != '' ]] || return 1
   else echo "no conventionally-named images found in \$VM_DIR '$VM_DIR/'"
        return 1
@@ -189,7 +192,7 @@ SelectIso()
   then IsValidSelection $iso_selection $N_ISOS                     || \
        iso_selection=$( VmDlg '' --menu "Select a boot ISO:" 20 70 50 \
                               $(PrintIsoOptions)                      )
-       clear
+       Clear
        [[ "$iso_selection" != '' ]] || return 1
   else echo "no ISOs found in \$ISOS_DIR: '$ISOS_DIR/'"
        return 1
@@ -203,7 +206,7 @@ WaitSsh()
   ssh-keygen -f "~/.ssh/known_hosts" -R [localhost]:$VM_SSH_PORT
   while (( $WAIT_SSH > 0 ))
   do    WAIT_SSH=($WAIT_SSH-1)
-        clear ; echo "logging in ssh in $(($WAIT_SSH+1)) seconds" ;
+        Clear ; echo "logging in ssh in $(($WAIT_SSH+1)) seconds" ;
         sleep 1
   done
 }
