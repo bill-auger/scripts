@@ -74,10 +74,12 @@ Main()
   local changed_files
   local dt
   local changed_file
+  local change_msgs=()
 
+  echo -e "\n=== processing (${#Branches[*]}) branches ===\n" >&2
   for branch in ${Branches[*]}
   do  IsUnambiguousRef ${branch} || continue
-      echo "scanning branch: $branch" >&2
+      echo "scanning branch: ${branch}" >&2
 
       # detect diffs
       common_ancestor=$(GitCommonAncestor -s master ${branch})
@@ -96,11 +98,14 @@ Main()
       else for changed_file in "${changed_files[@]}"
            do  if   [[ "${changed_file}" =~ ${SearchRegex} ]]
                then dt=$(git log -1 --format='%cs' ${branch} -- "${changed_file}")
-                    echo '---' ; printf "[${branch}]: %s %s\n" "${dt}" "${changed_file}"
+                    change_msgs+=( "[${branch}]: ${dt} ${changed_file}" )
                fi
            done
       fi
   done
+
+  echo -e "\n=== per-branch file diffs ===\n" >&2
+  (( ${#change_msgs[@]} )) && printf "%s\n" "${change_msgs[@]}" || echo "none"
 }
 
 
