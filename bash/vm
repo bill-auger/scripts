@@ -310,14 +310,13 @@ fi
                                        echo "no USE_VIRT* enabled - SSH will not be forwarded"   )
 [[ "$FWD_HTTP" ]] && ( [[ "$NET" ]] && echo "HTTP port $VM_HTTP_PORT forwarded to localhost:$VM_HTTP_PORT" || \
                                        echo "no USE_VIRT* enabled - HTTP will not be forwarded"               )
-echo "launching vm: '`echo "$Img" | grep -E '^.+\.img$' | sed -e 's/^\(.*\/\)\?\(.*\).img$/\2/'`'"
 CMD="$QEMU $CPU $MEM $HD $CD $BOOT $NET $AUDIO $VIDEO $MISC $QEMU_ARGS"
-echo "$CMD"
+msg="launching vm: '$(echo "$Img" | grep -E '^.+\.img$' | sed -e 's/^\(.*\/\)\?\(.*\).img$/\2/')'"
 
 # launch VM and optionally login ssh
 if   [[ "$1" == '--cmd' ]]
 then echo $CMD
 elif [[ "$SSH" ]] && [[ "$WAIT_SSH" ]]
-then $CMD & WaitSsh && $SSH
-else $CMD
+then echo $msg ; $CMD & WaitSsh && $SSH ;
+else echo $msg ; $CMD ;
 fi
