@@ -286,8 +286,9 @@ fi
 # AUDIO='-device intel-hda -device hda-duplex'
 AUDIO="${AUDIODEV},id=myaudiodev -device AC97,audiodev=myaudiodev"
 VIDEO_VNC='-display vnc=:0'
-VIDEO_SDL='-display sdl,show-cursor=on' # -no-frame'
-(( ${IS_HEADLESS} )) && VIDEO="${VIDEO_VNC}" || VIDEO="${VIDEO_SDL}"
+VIDEO_SDL='-display sdl' # ,show-cursor=on -no-frame
+(( ${IS_HEADLESS} )) && VIDEO="${VIDEO_VNC}" || VIDEO="${VGA} ${VIDEO_SDL}"
+
 MISC=''
 
 
@@ -308,7 +309,7 @@ fi
 [[ "$FWD_HTTP" ]] && ( [[ "$NET" ]] && echo "HTTP port $VM_HTTP_PORT forwarded to localhost:$VM_HTTP_PORT" || \
                                        echo "no USE_VIRT* enabled - HTTP will not be forwarded"               )
 echo "launching vm: '`echo "$Img" | grep -E '^.+\.img$' | sed -e 's/^\(.*\/\)\?\(.*\).img$/\2/'`'"
-CMD="$QEMU $CPU $MEM $HD $CD $BOOT $VGA $NET $AUDIO $VIDEO $MISC $QEMU_ARGS"
+CMD="$QEMU $CPU $MEM $HD $CD $BOOT $NET $AUDIO $VIDEO $MISC $QEMU_ARGS"
 echo "$CMD"
 
 # launch VM and optionally login ssh
