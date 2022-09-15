@@ -56,6 +56,7 @@ readonly VM_DIR_MISSING_ERR_MSG="VM_DIR not found: '$VM_DIR'"
 readonly ISOS_DIR_NAME="isos"
 readonly SCRATCH_IMG_NAME="scratch"
 readonly SCRATCH_IMG_SIZE=1G
+readonly ISO_NONE='None'
 readonly ISOS_DIR=$VM_DIR/$ISOS_DIR_NAME
 readonly SCRATCH_IMG_DIR=$VM_DIR/$SCRATCH_IMG_NAME
 readonly SCRATCH_IMG=$SCRATCH_IMG_DIR/$SCRATCH_IMG_NAME.img
@@ -123,7 +124,7 @@ PopulateIsos()
 
       ISOS[$iso_n]="${unsorted_isos[$sorted_iso_n]}"
   done
-
+  ISOS[$iso_n]=${ISO_NONE}
   readonly ISOS
   readonly N_ISOS=${#ISOS[@]}
 }
@@ -243,7 +244,7 @@ Iso="$ISO"
 if   ! DoesIsoExist "$Iso" && [[ "$ImgDir" == "$SCRATCH_IMG_NAME" ]]
 then (( $(ls *.iso | wc -l) == 1 )) && Iso=$(ls *.iso)
 
-     until DoesIsoExist "$Iso" ; do SelectIso || exit 1 ; done ;
+     until DoesIsoExist "$Iso" || [[ "$Iso" == "${ISO_NONE}" ]] ; do SelectIso || exit 1 ; done ;
 fi
 
 # log results
