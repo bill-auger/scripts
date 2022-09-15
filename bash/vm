@@ -18,6 +18,7 @@ ENVIRONMENT:
     * VM_DIR       - (mandatory) full path to parent directory of VM subdirectories
     * ARCH         - (optional)  launches qemu-system-$ARCH (default: 'x86_64 + kvm + smp')
     * MEM          - (optional)  specifies VM memory size (default: 2G)
+    * AUDIODEV     - (optional)  specifies virtual audo device
     * ISO          - (optional)  full path to .iso file for first optical disc - set as primary boot media (default: none)
     * IMG_B        - (optional)  full path to .img file for second hard disk (default: none)
     * SMP          - (optional)  SMP options as CSV: N_CORES,N_THREADS,N_SOCKETS (default: 2,1,1)
@@ -59,6 +60,7 @@ readonly SCRATCH_IMG_DIR=$VM_DIR/$SCRATCH_IMG_NAME
 readonly SCRATCH_IMG=$SCRATCH_IMG_DIR/$SCRATCH_IMG_NAME.img
 readonly SMP_REGEX="^[0-9],[0-9],[0-9]$"
 readonly DEF_MEM='2G'
+readonly DEF_AUDIODEV='alsa'
 readonly DEF_VGA='std' # cirrus, qxl, std, vmware
 readonly USE_VIRTIO=0
 readonly USE_VIRTFS=0
@@ -255,6 +257,7 @@ echo -e "Selected:$( [[ "$Iso" ]] && echo "\n\tIso: $Iso")\n\tImg: $Img"
 DoesIsoExist "$Iso"        && CD="-cdrom $Iso" BOOT="-boot order=d"                 || CD="" BOOT=""
 [[ "$MEM"               ]] && MEM="-m $MEM"                                         || MEM="-m $DEF_MEM"
 [[ "$VGA"               ]] && VGA="-vga $VGA"                                       || VGA="-vga $DEF_VGA"
+[[ "$AUDIODEV"          ]] && AUDIODEV="-audiodev $AUDIODEV"                        || AUDIODEV="-audiodev $DEF_AUDIODEV"
 [[ "$VM_SSH_PORT"       ]] && FWD_SSH=",hostfwd=tcp::$VM_SSH_PORT-:22"              || FWD_SSH=''
 [[ "$VM_HTTP_PORT"      ]] && FWD_HTTP=",hostfwd=tcp::$VM_HTTP_PORT-:$VM_HTTP_PORT" || FWD_HTTP=''
 QEMU="qemu-system-$ARCH $NAME"
@@ -277,7 +280,8 @@ then [[ "$VM_SSH_PORT" ]] && [[ "$VM_SSH_LOGIN"    ]] && SSH="ssh -o StrictHostK
 fi
 
 # prepare A/V
-AUDIO='-device intel-hda -device hda-duplex'
+# AUDIO='-device intel-hda -device hda-duplex'
+AUDIO="${AUDIODEV},id=myaudiodev -device AC97,audiodev=myaudiodev"
 VIDEO_VNC='-display vnc=:0'
 VIDEO_SDL='-display sdl,show-cursor=on' # -no-frame'
 (( ${IS_HEADLESS} )) && VIDEO="${VIDEO_VNC}" || VIDEO="${VIDEO_SDL}"
