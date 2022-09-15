@@ -312,7 +312,9 @@ CMD="$QEMU $CPU $MEM $HD $CD $BOOT $VGA $NET $AUDIO $VIDEO $MISC $QEMU_ARGS"
 echo "$CMD"
 
 # launch VM and optionally login ssh
-if   [[ "$SSH" ]] && [[ "$WAIT_SSH" ]]
+if   [[ "$1" == '--cmd' ]]
+then echo $CMD
+elif [[ "$SSH" ]] && [[ "$WAIT_SSH" ]]
 then $CMD & WaitSsh && $SSH
 else $CMD
 fi
